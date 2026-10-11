@@ -7,14 +7,22 @@ void Setup(void)
 
     trPrintln(TR_STR("Hello, world!"));
 
-    trPrintUSize(1337);
+    void* MyMemory = trReserveMemory(TR_GB(64));
+
+    trPrint(TR_STR("Reserved memory at "));
+    trPrintHex((tr_usize)(MyMemory));
     trPrintNewLine();
 
-    trPrintSSize(-1234);
+    trCommitMemory(MyMemory, TR_KB(4));
+
+    trPrint(TR_STR("Commited 4kb at "));
+    trPrintHex((tr_usize)(MyMemory));
     trPrintNewLine();
 
-    trPrintF64(-124874.23);
-    trPrintNewLine();
+    tr_u32* Stuff = (tr_u32*)MyMemory;
+
+    for (tr_u32 Index = 0; Index < TR_KB(4) / sizeof(tr_u32); Index++)
+        Stuff[Index] = Index;
 
     tr_clock End = trGetWallClock();
 

@@ -33,6 +33,56 @@ tr_func tr_usize trPrintln(tr_str Message)
     return (Result);
 }
 
+tr_func tr_usize trPrintHex(tr_usize Value)
+{
+    char Buffer[64] = {0};
+
+    tr_usize DigitIndex = sizeof(Buffer);
+    tr_usize DigitCount = 0;
+
+    do
+    {
+        tr_usize Digit = (Value % 16);
+        Value /= 16;
+
+        char DigitCharacter =
+            (Digit <= 9)  * ('0' + Digit) +
+            (Digit >= 10) * ('a' + Digit - 10);
+
+        DigitIndex--;
+        DigitCount++;
+
+        Buffer[DigitIndex] = DigitCharacter;
+    } while (Value);
+
+    tr_usize Result = trPrint(TR_STR_DATA(Buffer + DigitIndex, DigitCount));
+
+    return (Result);
+}
+
+tr_func tr_usize trPrintBinary(tr_usize Value)
+{
+    char Buffer[64] = {0};
+
+    tr_usize DigitIndex = sizeof(Buffer);
+    tr_usize DigitCount = 0;
+
+    do
+    {
+        char DigitCharacter = '0' + (Value % 2);
+        Value /= 2;
+
+        DigitIndex--;
+        DigitCount++;
+
+        Buffer[DigitIndex] = DigitCharacter;
+    } while (Value);
+
+    tr_usize Result = trPrint(TR_STR_DATA(Buffer + DigitIndex, DigitCount));
+
+    return (Result);
+}
+
 tr_func tr_usize trPrintUSize(tr_usize Value)
 {
     char Buffer[64] = {0};
@@ -160,6 +210,8 @@ tr_func tr_f64 trFloorF64(tr_f64 Value)
 #elif TR_PLATFORM_LINUX
 
 #define TR_LINUX_SYSCALL_NR_WRITE           (1)
+#define TR_LINUX_SYSCALL_NR_MMAP            (9)
+#define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
 #define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
 #define TR_LINUX_SYSCALL_NR_EXIT_GROUP      (231)
 
@@ -269,6 +321,47 @@ tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To)
 {
     tr_f64 Result = (tr_f64)(To - From) * 1e-9;
     return (Result);
+}
+
+tr_func void* trReserveMemory(tr_usize Size)
+{
+    tr_ssize Address = (tr_ssize)trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_MMAP,
+        0,
+        Size,
+        0x0,    // NOTE(vak): PROT_NONE,
+        0x22,   // NOTE(vak): MAP_PRIVATE | MAP_ANON
+        -1,
+        0
+    );
+
+    void* Result = (void*) TR_MAX(Address, 0);
+    return (Result);
+}
+
+tr_func tr_b32 trCommitMemory(void* At, tr_usize Size)
+{
+    tr_ssize Result = (tr_ssize)trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_MPROTECT,
+        (tr_usize)At,
+        Size,
+        0x3, // NOTE(vak): PROT_READ | PROT_WRITE,
+        0, 0, 0
+    );
+
+    tr_b32 Good = (Result >= 0);
+    return (Good);
+}
+
+tr_func void trDecommitMemory(void* At, tr_usize Size)
+{
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_MPROTECT,
+        (tr_usize)At,
+        Size,
+        0x0, // NOTE(vak): PROT_NONE
+        0, 0, 0
+    );
 }
 
 #else

@@ -69,6 +69,11 @@ typedef tr_u64  tr_b64;
 #define TR_MIN(A, B) ((A) < (B) ? (A) : (B))
 #define TR_MAX(A, B) ((A) > (B) ? (A) : (B))
 
+#define TR_KB(Amount) ((tr_ssize)(Amount) << 10)
+#define TR_MB(Amount) ((tr_ssize)(Amount) << 20)
+#define TR_GB(Amount) ((tr_ssize)(Amount) << 30)
+#define TR_TB(Amount) ((tr_ssize)(Amount) << 40)
+
 /////////////////////////////////////////////////
 // NOTE(vak): Strings
 /////////////////////////////////////////////////
@@ -92,6 +97,8 @@ tr_func tr_usize trPrintCharacter(char Character);
 tr_func tr_usize trPrintNewLine(void);
 tr_func tr_usize trPrint(tr_str Message);
 tr_func tr_usize trPrintln(tr_str Message);
+tr_func tr_usize trPrintHex(tr_usize Value);
+tr_func tr_usize trPrintBinary(tr_usize Value);
 tr_func tr_usize trPrintUSize(tr_usize Value);
 tr_func tr_usize trPrintSSize(tr_ssize Value);
 tr_func tr_usize trPrintF64(tr_f64 Value);
@@ -104,6 +111,10 @@ tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
 
 tr_func tr_clock trGetWallClock(void);
 tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To);
+
+tr_func void* trReserveMemory(tr_usize Size);
+tr_func tr_b32 trCommitMemory(void* At, tr_usize Size);
+tr_func void trDecommitMemory(void* At, tr_usize Size);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation
