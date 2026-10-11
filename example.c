@@ -5,7 +5,7 @@ void Setup(void)
 {
 }
 
-void Frame(void)
+void Frame(tr_f32 DeltaTime)
 {
 }
 

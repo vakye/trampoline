@@ -330,6 +330,7 @@ tr_func tr_f64 trFloorF64(tr_f64 Value)
 #define TR_LINUX_SYSCALL_NR_WRITE           (1)
 #define TR_LINUX_SYSCALL_NR_MMAP            (9)
 #define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
+#define TR_LINUX_SYSCALL_NR_NANOSLEEP       (35)
 #define TR_LINUX_SYSCALL_NR_EXIT            (60)
 #define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
 #define TR_LINUX_SYSCALL_NR_EXIT_GROUP      (231)
@@ -388,22 +389,46 @@ tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
 tr_func void trVulkanEndFrame(void);
 
+typedef struct
+{
+    tr_f64 TargetFPS;
+} tr_linux_state;
+
+static tr_linux_state trLinux = {0};
+
 void trLinuxBootstrap(tr_s32 ArgCount, char* Args[], char* Envp[])
 {
     trLinuxWaylandSetup();
     trVulkanSetup();
 
+    trLinux.TargetFPS = 60.0;
+
     Setup();
+
+    tr_clock FrameBegin = trGetWallClock();
+    tr_f64 DeltaTime = 1.0 / trLinux.TargetFPS;
 
     while (!trLinuxWaylandShouldQuit())
     {
         trLinuxWaylandPollEvents();
         trVulkanBeginFrame();
 
-        Frame();
+        Frame(DeltaTime);
 
         trVulkanEndFrame();
         trLinuxWaylandPresent();
+
+        tr_f64 DesiredFrameTime = 1.0 / trLinux.TargetFPS;
+
+        DeltaTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
+
+        while (DeltaTime < DesiredFrameTime)
+        {
+            trWait(DesiredFrameTime - DeltaTime);
+            DeltaTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
+        }
+
+        FrameBegin = trGetWallClock();
     }
 
     trLinuxSyscall(
@@ -416,6 +441,16 @@ int main(tr_s32 ArgCount, char* Args[], char* Envp[])
 {
     Setup();
     return (0);
+}
+
+tr_func tr_f64 trGetTargetFPS(tr_f64 FPS)
+{
+    return (trLinux.TargetFPS);
+}
+
+tr_func void trSetTargetFPS(tr_f64 FPS)
+{
+    trLinux.TargetFPS = FPS;
 }
 
 tr_func tr_u32 trGetWindowWidth(void)
@@ -483,6 +518,32 @@ tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To)
 {
     tr_f64 Result = (tr_f64)(To - From) * 1e-9;
     return (Result);
+}
+
+tr_func void trWait(tr_f64 Seconds)
+{
+    tr_f64 IntegerPart = trFloorF64(Seconds);
+    tr_f64 DecimalPart = Seconds - IntegerPart;
+
+    tr_linux_timespec Duration =
+    {
+        .Seconds        = (tr_usize)(IntegerPart),
+        .Nanoseconds    = (tr_usize)(DecimalPart * 1e9),
+    };
+
+    while (Duration.Seconds || Duration.Nanoseconds)
+    {
+        tr_linux_timespec Remainder = {0};
+
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_NANOSLEEP,
+            (tr_usize)(&Duration),
+            (tr_usize)(&Remainder),
+            0, 0, 0, 0
+        );
+
+        Duration = Remainder;
+    }
 }
 
 tr_func void* trReserveMemory(tr_usize Size)

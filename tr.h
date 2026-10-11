@@ -173,6 +173,9 @@ tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 typedef tr_usize tr_clock;
 
+tr_func tr_f64 trGetTargetFPS(tr_f64 FPS);
+tr_func void trSetTargetFPS(tr_f64 FPS);
+
 tr_func tr_u32 trGetWindowWidth(void);
 tr_func tr_u32 trGetWindowHeight(void);
 
@@ -181,6 +184,7 @@ tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
 
 tr_func tr_clock trGetWallClock(void);
 tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To);
+tr_func void trWait(tr_f64 Seconds);
 
 tr_func void* trReserveMemory(tr_usize Size);
 tr_func tr_b32 trCommitMemory(void* At, tr_usize Size);
