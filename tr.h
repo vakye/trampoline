@@ -173,7 +173,7 @@ tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 typedef tr_usize tr_clock;
 
-tr_func tr_f64 trGetTargetFPS(tr_f64 FPS);
+tr_func tr_f64 trGetTargetFPS(void);
 tr_func void trSetTargetFPS(tr_f64 FPS);
 
 tr_func tr_u32 trGetWindowWidth(void);

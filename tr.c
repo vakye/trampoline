@@ -443,7 +443,7 @@ int main(tr_s32 ArgCount, char* Args[], char* Envp[])
     return (0);
 }
 
-tr_func tr_f64 trGetTargetFPS(tr_f64 FPS)
+tr_func tr_f64 trGetTargetFPS(void)
 {
     return (trLinux.TargetFPS);
 }
