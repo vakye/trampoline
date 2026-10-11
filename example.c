@@ -3,6 +3,8 @@
 
 void Setup(void)
 {
+    tr_clock Begin = trGetWallClock();
+
     trPrintln(TR_STR("Hello, world!"));
 
     trPrintUSize(1337);
@@ -12,6 +14,13 @@ void Setup(void)
     trPrintNewLine();
 
     trPrintF64(-124874.23);
+    trPrintNewLine();
+
+    tr_clock End = trGetWallClock();
+
+    trPrint(TR_STR("Execution finished in "));
+    trPrintF64(1000.0 * trGetSecondsElapsed(Begin, End));
+    trPrint(TR_STR(" ms"));
     trPrintNewLine();
 }
 

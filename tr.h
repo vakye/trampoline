@@ -86,19 +86,24 @@ typedef struct
 // NOTE(vak): Cheatsheet
 /////////////////////////////////////////////////
 
-tr_func tr_usize trPrintCharacter   (char Character);
-tr_func tr_usize trPrintNewLine     (void);
-tr_func tr_usize trPrint            (tr_str Message);
-tr_func tr_usize trPrintln          (tr_str Message);
-tr_func tr_usize trPrintUSize       (tr_usize Value);
-tr_func tr_usize trPrintSSize       (tr_ssize Value);
-tr_func tr_usize trPrintF64         (tr_f64 Value);
+typedef tr_usize tr_clock;
 
-tr_func tr_f32 trFloorF32 (tr_f32 Value);
-tr_func tr_f64 trFloorF64 (tr_f64 Value);
+tr_func tr_usize trPrintCharacter(char Character);
+tr_func tr_usize trPrintNewLine(void);
+tr_func tr_usize trPrint(tr_str Message);
+tr_func tr_usize trPrintln(tr_str Message);
+tr_func tr_usize trPrintUSize(tr_usize Value);
+tr_func tr_usize trPrintSSize(tr_ssize Value);
+tr_func tr_usize trPrintF64(tr_f64 Value);
+
+tr_func tr_f32 trFloorF32(tr_f32 Value);
+tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
+
+tr_func tr_clock trGetWallClock(void);
+tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation

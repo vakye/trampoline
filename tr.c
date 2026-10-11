@@ -159,8 +159,9 @@ tr_func tr_f64 trFloorF64(tr_f64 Value)
 
 #elif TR_PLATFORM_LINUX
 
-#define TR_LINUX_SYSCALL_NR_WRITE       (1)
-#define TR_LINUX_SYSCALL_NR_EXIT_GROUP  (231)
+#define TR_LINUX_SYSCALL_NR_WRITE           (1)
+#define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
+#define TR_LINUX_SYSCALL_NR_EXIT_GROUP      (231)
 
 static tr_usize trLinuxSyscall(
     tr_usize NR,
@@ -240,6 +241,33 @@ tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size)
     );
 
     tr_usize Result = TR_MAX(0, BytesWritten);
+    return (Result);
+}
+
+typedef struct
+{
+    tr_usize Seconds;
+    tr_ssize Nanoseconds;
+} tr_linux_timespec;
+
+tr_func tr_clock trGetWallClock(void)
+{
+    tr_linux_timespec Now = {0};
+
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_CLOCK_GETTIME,
+        1, // NOTE(vak): CLOCK_MONOTONIC
+        (tr_usize)(&Now),
+        0, 0, 0, 0
+    );
+
+    tr_clock Result = Now.Seconds*1000000000 + Now.Nanoseconds;
+    return (Result);
+}
+
+tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To)
+{
+    tr_f64 Result = (tr_f64)(To - From) * 1e-9;
     return (Result);
 }
 
