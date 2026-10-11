@@ -3,9 +3,16 @@
 
 void Setup(void)
 {
-    tr_str Message = trStr("Hello, world!\n");
+    trPrintln(TR_STR("Hello, world!"));
 
-    trWriteStdOut(Message.Data, Message.Size);
+    trPrintUSize(1337);
+    trPrintNewLine();
+
+    trPrintSSize(-1234);
+    trPrintNewLine();
+
+    trPrintF64(-124874.23);
+    trPrintNewLine();
 }
 
 #include "tr.c"

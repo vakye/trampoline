@@ -13,6 +13,7 @@ CompileFlags=" \
     -fno-stack-protector \
     -nostdlib \
     -std=c11 \
+    -mavx \
     -Wall -Wextra -Wpedantic -Werror \
     -Wno-unused-parameter \
     -Wno-unused-variable \

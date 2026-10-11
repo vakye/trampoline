@@ -1,4 +1,151 @@
 
+#include <immintrin.h>
+
+/////////////////////////////////////////////////
+// NOTE(vak): Printing
+/////////////////////////////////////////////////
+
+tr_func tr_usize trPrintCharacter(char Character)
+{
+    tr_usize Result = trWriteStdOut(&Character, 1);
+    return (Result);
+}
+
+tr_func tr_usize trPrintNewLine(void)
+{
+    tr_usize Result = trPrintCharacter('\n');
+    return (Result);
+}
+
+tr_func tr_usize trPrint(tr_str Message)
+{
+    tr_usize Result = trWriteStdOut(Message.Data, Message.Size);
+    return (Result);
+}
+
+tr_func tr_usize trPrintln(tr_str Message)
+{
+    tr_usize Result = 0;
+
+    Result += trPrint(Message);
+    Result += trPrintNewLine();
+
+    return (Result);
+}
+
+tr_func tr_usize trPrintUSize(tr_usize Value)
+{
+    char Buffer[64] = {0};
+
+    tr_usize DigitIndex = sizeof(Buffer);
+    tr_usize DigitCount = 0;
+
+    do
+    {
+        char DigitCharacter = '0' + (Value % 10);
+        Value /= 10;
+
+        DigitIndex--;
+        DigitCount++;
+
+        Buffer[DigitIndex] = DigitCharacter;
+    } while (Value);
+
+    tr_usize Result = trPrint(TR_STR_DATA(Buffer + DigitIndex, DigitCount));
+
+    return (Result);
+}
+
+tr_func tr_usize trPrintSSize(tr_ssize Value)
+{
+    tr_usize Result = 0;
+
+    if (Value < 0)
+    {
+        Result += trPrintCharacter('-');
+        Value = -Value;
+    }
+
+    Result += trPrintUSize(Value);
+
+    return (Result);
+}
+
+tr_func tr_usize trPrintF64(tr_f64 Value)
+{
+    tr_usize Result = 0;
+
+    if (Value < 0)
+    {
+        Result += trPrintCharacter('-');
+        Value = -Value;
+    }
+
+    char Buffer[512] = {0};
+
+    tr_f64 IntegerPart = trFloorF64(Value);
+    tr_f64 DecimalPart = Value - IntegerPart;
+
+    {
+        tr_usize DigitIndex = sizeof(Buffer);
+        tr_usize DigitCount = 0;
+
+        do
+        {
+            tr_f64 A = trFloorF64(IntegerPart / 10.0);
+            tr_f64 B = IntegerPart - A*10.0;
+
+            char DigitCharacter = '0' + (tr_usize)(B);
+            IntegerPart = A;
+
+            DigitIndex--;
+            DigitCount++;
+
+            Buffer[DigitIndex] = DigitCharacter;
+        } while (IntegerPart);
+
+        Result += trPrint(TR_STR_DATA(Buffer + DigitIndex, DigitCount));
+    }
+
+    Result += trPrintCharacter('.');
+
+    tr_usize DecimalDigits = 4;
+
+    {
+        for (tr_usize Index = 0; Index < DecimalDigits; Index++)
+        {
+            DecimalPart *= 10.0;
+
+            tr_usize Digit = (tr_usize)DecimalPart;
+            char DigitCharacter = '0' + (tr_usize)(DecimalPart);
+
+            DecimalPart -= Digit;
+
+            Buffer[Index] = DigitCharacter;
+        }
+
+        Result += trPrint(TR_STR_DATA(Buffer, DecimalDigits));
+    }
+
+    return (Result);
+}
+
+/////////////////////////////////////////////////
+// NOTE(vak): Rounding
+/////////////////////////////////////////////////
+
+tr_func tr_f32 trFloorF32(tr_f32 Value)
+{
+    tr_f32 Result = _mm_cvtss_f32(_mm_floor_ps(_mm_set_ss(Value)));
+    return (Result);
+}
+
+tr_func tr_f64 trFloorF64(tr_f64 Value)
+{
+    tr_f64 Result = _mm_cvtsd_f64(_mm_floor_pd(_mm_set_sd(Value)));
+    return (Result);
+}
+
 /////////////////////////////////////////////////
 // NOTE(vak): Windows Implementation
 /////////////////////////////////////////////////
@@ -99,4 +246,25 @@ tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size)
 #else
     #error Unimplemented platform
 #endif
+
+void* memset(void* DestInit, tr_s32 Byte, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+
+    while (Size--)
+        *Dest++ = (tr_u8)Byte;
+
+    return (DestInit);
+}
+
+void* memcpy(void* DestInit, void* SourceInit, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+    tr_u8* Source = (tr_u8*)SourceInit;
+
+    while (Size--)
+        *Dest++ = *Source++;
+
+    return (DestInit);
+}
 
