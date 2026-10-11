@@ -74,6 +74,23 @@ typedef tr_u64  tr_b64;
 #define TR_GB(Amount) ((tr_ssize)(Amount) << 30)
 #define TR_TB(Amount) ((tr_ssize)(Amount) << 40)
 
+#define TR_ALIGN_DOWN(Value, PowerOf2) \
+        ((Value) & ~((PowerOf2) - 1))
+
+#define TR_ALIGN_UP(Value, PowerOf2) \
+        (((Value) + (PowerOf2) - 1) & ~((PowerOf2) - 1))
+
+/////////////////////////////////////////////////
+// NOTE(vak): Memory
+/////////////////////////////////////////////////
+
+tr_func void trZeroMemory(void* DestInit, tr_usize Size);
+tr_func void trFillMemory(void* DestInit, tr_u8 Byte, tr_usize Size);
+tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size);
+
+#define trZeroArray(Pointer, Count) trZeroMemory(Pointer, sizeof(*(Pointer)) * (Count))
+#define trZeroType(Pointer) trZeroArray(Pointer, 1)
+
 /////////////////////////////////////////////////
 // NOTE(vak): Strings
 /////////////////////////////////////////////////
@@ -88,10 +105,38 @@ typedef struct
 #define TR_STR_DATA(Data, Size) (tr_str){Data, Size}
 
 /////////////////////////////////////////////////
-// NOTE(vak): Cheatsheet
+// NOTE(vak): Arena
 /////////////////////////////////////////////////
 
-typedef tr_usize tr_clock;
+typedef struct
+{
+    void* Base;
+    tr_usize Used;
+    tr_usize Commited;
+    tr_usize Reserved;
+} tr_arena;
+
+tr_func tr_b32 trMakeArena(tr_arena* Arena, tr_usize MinCommited, tr_usize MinReserved);
+tr_func void trResetArena(tr_arena* Arena);
+
+tr_func tr_usize trGetArenaPosition(tr_arena* Arena);
+tr_func void trSetArenaPosition(tr_arena* Arena, tr_usize Position);
+
+tr_func void* trPushArena(tr_arena* Arena, tr_usize Size);
+tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size);
+
+#define trPushArenaArray(Arena, Type, Count) \
+    trPushArena(Arena, sizeof(Type)* (Count))
+
+#define trPushArenaArrayZero(Arena, Type, Count) \
+    trPushArenaZero(Arena, sizeof(Type)* (Count))
+
+#define trPushArenaType(Arena, Type) trPushArenaArray(Arena, Type, 1)
+#define trPushArenaTypeZero(Arena, Type) trPushArenaArrayZero(Arena, Type, 1)
+
+/////////////////////////////////////////////////
+// NOTE(vak): Printing
+/////////////////////////////////////////////////
 
 tr_func tr_usize trPrintCharacter(char Character);
 tr_func tr_usize trPrintNewLine(void);
@@ -103,8 +148,18 @@ tr_func tr_usize trPrintUSize(tr_usize Value);
 tr_func tr_usize trPrintSSize(tr_ssize Value);
 tr_func tr_usize trPrintF64(tr_f64 Value);
 
+/////////////////////////////////////////////////
+// NOTE(vak): Rounding
+/////////////////////////////////////////////////
+
 tr_func tr_f32 trFloorF32(tr_f32 Value);
 tr_func tr_f64 trFloorF64(tr_f64 Value);
+
+/////////////////////////////////////////////////
+// NOTE(vak): Platform
+/////////////////////////////////////////////////
+
+typedef tr_usize tr_clock;
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);

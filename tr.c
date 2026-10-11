@@ -2,6 +2,103 @@
 #include <immintrin.h>
 
 /////////////////////////////////////////////////
+// NOTE(vak): Memory
+/////////////////////////////////////////////////
+
+tr_func void trZeroMemory(void* DestInit, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+    while (Size--)
+        *Dest++ = 0;
+}
+
+tr_func void trFillMemory(void* DestInit, tr_u8 Byte, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+    while (Size--)
+        *Dest++ = Byte;
+}
+
+tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+    tr_u8* Source = (tr_u8*)SourceInit;
+    while (Size--)
+        *Dest++ = *Source++;
+}
+
+/////////////////////////////////////////////////
+// NOTE(vak): Arena
+/////////////////////////////////////////////////
+
+#define TR_ARENA_GRANULE_SIZE TR_KB(256)
+
+tr_func tr_b32 trMakeArena(tr_arena* Arena, tr_usize MinCommited, tr_usize MinReserved)
+{
+    trZeroType(Arena);
+
+    Arena->Commited = TR_ALIGN_UP(MinCommited, TR_ARENA_GRANULE_SIZE);
+    Arena->Reserved = TR_ALIGN_UP(MinReserved, TR_ARENA_GRANULE_SIZE);
+
+    Arena->Base = trReserveMemory(Arena->Reserved);
+    if (!Arena->Base)
+        return (TR_FALSE);
+
+    if (Arena->Commited)
+    {
+        if (!trCommitMemory(Arena->Base, Arena->Commited))
+            return (TR_FALSE);
+    }
+
+    return (TR_TRUE);
+}
+
+tr_func void trResetArena(tr_arena* Arena)
+{
+    trSetArenaPosition(Arena, 0);
+}
+
+tr_func tr_usize trGetArenaPosition(tr_arena* Arena)
+{
+    tr_usize Result = Arena->Used;
+    return (Result);
+}
+
+tr_func void trSetArenaPosition(tr_arena* Arena, tr_usize Position)
+{
+    Arena->Used = 0;
+}
+
+tr_func void* trPushArena(tr_arena* Arena, tr_usize Size)
+{
+    if (Arena->Used + Size > Arena->Commited)
+    {
+        tr_usize ExpandSize = (Arena->Used + Size) - Arena->Commited;
+        tr_usize CommitSize = TR_ALIGN_UP(ExpandSize, TR_ARENA_GRANULE_SIZE);
+        void*    CommitAt   = (tr_u8*)Arena->Base + Arena->Commited;
+
+        if (!trCommitMemory(CommitAt, CommitSize))
+            return (0);
+
+        Arena->Commited += CommitSize;
+    }
+
+    void* Result = (tr_u8*)Arena->Base + Arena->Used;
+    Arena->Used += Size;
+
+    return (Result);
+}
+
+tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size)
+{
+    void* Result = trPushArena(Arena, Size);
+    if (Result)
+        trZeroMemory(Result, Size);
+
+    return (Result);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Printing
 /////////////////////////////////////////////////
 

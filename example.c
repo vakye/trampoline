@@ -5,23 +5,14 @@ void Setup(void)
 {
     tr_clock Begin = trGetWallClock();
 
-    trPrintln(TR_STR("Hello, world!"));
+    tr_arena Arena = {0};
 
-    void* MyMemory = trReserveMemory(TR_GB(64));
+    trMakeArena(&Arena, 0, TR_GB(64));
 
-    trPrint(TR_STR("Reserved memory at "));
-    trPrintHex((tr_usize)(MyMemory));
-    trPrintNewLine();
+    tr_u32 Count = 65536;
+    tr_u32* Stuff = trPushArenaArrayZero(&Arena, tr_u32, Count);
 
-    trCommitMemory(MyMemory, TR_KB(4));
-
-    trPrint(TR_STR("Commited 4kb at "));
-    trPrintHex((tr_usize)(MyMemory));
-    trPrintNewLine();
-
-    tr_u32* Stuff = (tr_u32*)MyMemory;
-
-    for (tr_u32 Index = 0; Index < TR_KB(4) / sizeof(tr_u32); Index++)
+    for (tr_u32 Index = 0; Index < Count; Index++)
         Stuff[Index] = Index;
 
     tr_clock End = trGetWallClock();
