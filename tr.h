@@ -62,9 +62,16 @@ typedef tr_u64  tr_b64;
     #define tr_func static
 #endif
 
+#if !defined(trInvalidCodePath)
+    #define trInvalidCodePath __builtin_trap()
+#endif
+
 /////////////////////////////////////////////////
 // NOTE(vak): Macros
 /////////////////////////////////////////////////
+
+#define TR_ARRAY_COUNT(Array) \
+    (sizeof(Array) / sizeof((Array)[0]))
 
 #define TR_MIN(A, B) ((A) < (B) ? (A) : (B))
 #define TR_MAX(A, B) ((A) > (B) ? (A) : (B))
@@ -79,6 +86,9 @@ typedef tr_u64  tr_b64;
 
 #define TR_ALIGN_UP(Value, PowerOf2) \
         (((Value) + (PowerOf2) - 1) & ~((PowerOf2) - 1))
+
+#define trAssert(Expression) \
+    if (!(Expression)) trInvalidCodePath
 
 /////////////////////////////////////////////////
 // NOTE(vak): Memory
@@ -101,8 +111,10 @@ typedef struct
     tr_usize Size;
 } tr_str;
 
-#define TR_STR(Literal) (tr_str){Literal, sizeof(Literal) - 1}
-#define TR_STR_DATA(Data, Size) (tr_str){Data, Size}
+#define trStr(Literal) (tr_str){Literal, sizeof(Literal) - 1}
+#define trStrData(Data, Size) (tr_str){Data, Size}
+
+tr_func tr_str trCString(const char* A);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Arena
@@ -126,10 +138,10 @@ tr_func void* trPushArena(tr_arena* Arena, tr_usize Size);
 tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size);
 
 #define trPushArenaArray(Arena, Type, Count) \
-    trPushArena(Arena, sizeof(Type)* (Count))
+    (Type*)trPushArena(Arena, sizeof(Type) * (Count))
 
 #define trPushArenaArrayZero(Arena, Type, Count) \
-    trPushArenaZero(Arena, sizeof(Type)* (Count))
+    (Type*)trPushArenaZero(Arena, sizeof(Type) * (Count))
 
 #define trPushArenaType(Arena, Type) trPushArenaArray(Arena, Type, 1)
 #define trPushArenaTypeZero(Arena, Type) trPushArenaArrayZero(Arena, Type, 1)
@@ -161,6 +173,9 @@ tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 typedef tr_usize tr_clock;
 
+tr_func tr_u32 trGetWindowWidth(void);
+tr_func tr_u32 trGetWindowHeight(void);
+
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
 
@@ -170,6 +185,8 @@ tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To);
 tr_func void* trReserveMemory(tr_usize Size);
 tr_func tr_b32 trCommitMemory(void* At, tr_usize Size);
 tr_func void trDecommitMemory(void* At, tr_usize Size);
+
+tr_func void trExit(tr_u8 ExitCode);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation
