@@ -601,7 +601,214 @@ tr_func void trExit(tr_u8 ExitCode)
 /////////////////////////////////////////////////
 
 #include <wayland-client.h>
-#include "wayland_xdg.h"
+
+// NOTE(vak): Stuff copied from xdg-shell-client-protocol.h
+// and xdg_private.h
+//
+// https://github.com/sagarthereal/wayland/blob/main/xdg-shell-client-protocol.h
+// https://github.com/sagarthereal/wayland/blob/main/xdg_private.h
+
+struct xdg_wm_base;
+struct xdg_surface;
+struct xdg_toplevel;
+
+extern const struct wl_interface xdg_wm_base_interface;
+extern const struct wl_interface xdg_surface_interface;
+extern const struct wl_interface xdg_toplevel_interface;
+
+struct xdg_wm_base_listener
+{
+    void (*ping)(void *data,
+                 struct xdg_wm_base *xdg_wm_base,
+                 uint32_t serial);
+};
+
+static inline int
+xdg_wm_base_add_listener(struct xdg_wm_base *xdg_wm_base,
+			 const struct xdg_wm_base_listener *listener, void *data)
+{
+	return wl_proxy_add_listener((struct wl_proxy *) xdg_wm_base,
+				     (void (**)(void)) listener, data);
+}
+
+static inline void
+xdg_wm_base_pong(struct xdg_wm_base *xdg_wm_base, uint32_t serial)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) xdg_wm_base,
+			 3, NULL, wl_proxy_get_version((struct wl_proxy *) xdg_wm_base), 0, serial);
+}
+
+static inline struct xdg_surface *
+xdg_wm_base_get_xdg_surface(struct xdg_wm_base *xdg_wm_base, struct wl_surface *surface)
+{
+	struct wl_proxy *id;
+
+	id = wl_proxy_marshal_flags((struct wl_proxy *) xdg_wm_base,
+			 2, &xdg_surface_interface, wl_proxy_get_version((struct wl_proxy *) xdg_wm_base), 0, NULL, surface);
+
+	return (struct xdg_surface *) id;
+}
+
+struct xdg_surface_listener
+{
+	void (*configure)(void *data,
+			  struct xdg_surface *xdg_surface,
+			  uint32_t serial);
+};
+
+static inline int
+xdg_surface_add_listener(struct xdg_surface *xdg_surface,
+			 const struct xdg_surface_listener *listener, void *data)
+{
+	return wl_proxy_add_listener((struct wl_proxy *) xdg_surface,
+				     (void (**)(void)) listener, data);
+}
+
+static inline struct xdg_toplevel *
+xdg_surface_get_toplevel(struct xdg_surface *xdg_surface)
+{
+	struct wl_proxy *id;
+
+	id = wl_proxy_marshal_flags((struct wl_proxy *) xdg_surface,
+			 1, &xdg_toplevel_interface, wl_proxy_get_version((struct wl_proxy *) xdg_surface), 0, NULL);
+
+	return (struct xdg_toplevel *) id;
+}
+
+static inline void
+xdg_surface_ack_configure(struct xdg_surface *xdg_surface, uint32_t serial)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) xdg_surface,
+			 4, NULL, wl_proxy_get_version((struct wl_proxy *) xdg_surface), 0, serial);
+}
+
+struct xdg_toplevel_listener {
+	void (*configure)(void *data,
+			  struct xdg_toplevel *xdg_toplevel,
+			  int32_t width,
+			  int32_t height,
+			  struct wl_array *states);
+
+	void (*close)(void *data,
+		      struct xdg_toplevel *xdg_toplevel);
+
+	void (*configure_bounds)(void *data,
+				 struct xdg_toplevel *xdg_toplevel,
+				 int32_t width,
+				 int32_t height);
+
+	void (*wm_capabilities)(void *data,
+				struct xdg_toplevel *xdg_toplevel,
+				struct wl_array *capabilities);
+};
+
+static inline int
+xdg_toplevel_add_listener(struct xdg_toplevel *xdg_toplevel,
+			  const struct xdg_toplevel_listener *listener, void *data)
+{
+	return wl_proxy_add_listener((struct wl_proxy *) xdg_toplevel,
+				     (void (**)(void)) listener, data);
+}
+
+extern const struct wl_interface wl_output_interface;
+extern const struct wl_interface wl_seat_interface;
+extern const struct wl_interface wl_surface_interface;
+extern const struct wl_interface xdg_surface_interface;
+extern const struct wl_interface xdg_toplevel_interface;
+
+static const struct wl_interface *xdg_shell_types[] = {
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	&xdg_surface_interface,
+	&wl_surface_interface,
+	&xdg_toplevel_interface,
+	NULL,
+	&xdg_surface_interface,
+	NULL,
+	&xdg_toplevel_interface,
+	&wl_seat_interface,
+	NULL,
+	NULL,
+	NULL,
+	&wl_seat_interface,
+	NULL,
+	&wl_seat_interface,
+	NULL,
+	NULL,
+	&wl_output_interface,
+	&wl_seat_interface,
+	NULL,
+	NULL,
+	NULL,
+};
+
+static const struct wl_message xdg_wm_base_requests[] = {
+	{ "destroy", "", xdg_shell_types + 0 },
+	{ "create_positioner", "n", xdg_shell_types + 4 },
+	{ "get_xdg_surface", "no", xdg_shell_types + 5 },
+	{ "pong", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_wm_base_events[] = {
+	{ "ping", "u", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_wm_base_interface = {
+	"xdg_wm_base", 5,
+	4, xdg_wm_base_requests,
+	1, xdg_wm_base_events,
+};
+
+static const struct wl_message xdg_surface_requests[] = {
+	{ "destroy", "", xdg_shell_types + 0 },
+	{ "get_toplevel", "n", xdg_shell_types + 7 },
+	{ "get_popup", "n?oo", xdg_shell_types + 8 },
+	{ "set_window_geometry", "iiii", xdg_shell_types + 0 },
+	{ "ack_configure", "u", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_surface_events[] = {
+	{ "configure", "u", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_surface_interface = {
+	"xdg_surface", 5,
+	5, xdg_surface_requests,
+	1, xdg_surface_events,
+};
+
+static const struct wl_message xdg_toplevel_requests[] = {
+	{ "destroy", "", xdg_shell_types + 0 },
+	{ "set_parent", "?o", xdg_shell_types + 11 },
+	{ "set_title", "s", xdg_shell_types + 0 },
+	{ "set_app_id", "s", xdg_shell_types + 0 },
+	{ "show_window_menu", "ouii", xdg_shell_types + 12 },
+	{ "move", "ou", xdg_shell_types + 16 },
+	{ "resize", "ouu", xdg_shell_types + 18 },
+	{ "set_max_size", "ii", xdg_shell_types + 0 },
+	{ "set_min_size", "ii", xdg_shell_types + 0 },
+	{ "set_maximized", "", xdg_shell_types + 0 },
+	{ "unset_maximized", "", xdg_shell_types + 0 },
+	{ "set_fullscreen", "?o", xdg_shell_types + 21 },
+	{ "unset_fullscreen", "", xdg_shell_types + 0 },
+	{ "set_minimized", "", xdg_shell_types + 0 },
+};
+
+static const struct wl_message xdg_toplevel_events[] = {
+	{ "configure", "iia", xdg_shell_types + 0 },
+	{ "close", "", xdg_shell_types + 0 },
+	{ "configure_bounds", "4ii", xdg_shell_types + 0 },
+	{ "wm_capabilities", "5a", xdg_shell_types + 0 },
+};
+
+const struct wl_interface xdg_toplevel_interface = {
+	"xdg_toplevel", 5,
+	14, xdg_toplevel_requests,
+	4, xdg_toplevel_events,
+};
 
 typedef struct
 {
