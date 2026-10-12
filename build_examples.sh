@@ -2,9 +2,6 @@
 
 Compiler="clang"
 
-SourceFile="example.c"
-OutputFile="example"
-
 CompileFlags=" \
     -g \
     -O0 \
@@ -18,8 +15,7 @@ CompileFlags=" \
     -Wno-unused-parameter \
     -Wno-unused-variable \
     -Wno-unused-but-set-variable \
-    -Wno-unused-function \
-    -o $OutputFile"
+    -Wno-unused-function"
 
 LinkFlags=" \
     -fuse-ld=lld \
@@ -28,5 +24,8 @@ LinkFlags=" \
     -Wl,-lc \
     -Wl,-lwayland-client"
 
-$Compiler $CompileFlags $SourceFile $LinkFlags
+for SourceFile in example*.c; do
+    OutputFile=${SourceFile%.*}
+    $Compiler $CompileFlags -o $OutputFile $SourceFile $LinkFlags
+done
 

@@ -124,6 +124,39 @@ tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size)
 }
 
 /////////////////////////////////////////////////
+// NOTE(vak): Random number generator
+/////////////////////////////////////////////////
+
+tr_func void trRandomSeed(tr_random* Entropy)
+{
+    Entropy->State = trGetWallClock();
+}
+
+tr_func tr_u32 trRandomU32(tr_random* Entropy)
+{
+    // NOTE(vak): PCG-XSH-RR with 64-bit state and 32-bit output
+    // Taken from https://en.wikipedia.org/wiki/Permuted_congruential_generator
+
+    tr_u64 X = Entropy->State;
+    tr_u32 Count = (tr_u32)(X >> 59);
+
+    Entropy->State = X * 6364136223846793005ull + 1442695040888963407ull;
+    X ^= X >> 18;
+
+    tr_u32 V = (tr_u32)(X >> 27);
+    tr_u32 Result = (V >> Count) | (V << (-Count & 31));
+
+    return (Result);
+}
+
+tr_func tr_f32 trRandomF32(tr_random* Entropy, tr_f32 From, tr_f32 To)
+{
+    tr_f32 Normalized = trRandomU32(Entropy) / 4294967295.0f;
+    tr_f32 Result = From + (To - From)*Normalized;
+    return (Result);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Printing
 /////////////////////////////////////////////////
 
@@ -401,6 +434,21 @@ tr_func tr_f32 trCosF32(tr_f32 X)
 tr_func tr_f32 trTanF32(tr_f32 X)
 {
     tr_f32 Result = trSinF32(X) / trCosF32(X);
+    return (Result);
+}
+
+/////////////////////////////////////////////////
+// NOTE(vak): Power & Exponential
+/////////////////////////////////////////////////
+
+tr_func tr_f32 trSquareRootF32(tr_f32 X)
+{
+#if TR_ARCHITECTURE_X64
+    tr_f32 Result = _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(X)));
+#else
+    #error Fallback not yet implemented for trSquareRootF32()
+#endif
+
     return (Result);
 }
 
@@ -2134,7 +2182,7 @@ tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R,
         trVertex2D(X, Y, U, V, R, G, B, A);
     }
 
-    trVertex2D(FirstX,  FirstY, 0.0f, 0.5f, R, G, B, A);
+    trVertex2D(FirstX, FirstY, 0.0f, 0.5f, R, G, B, A);
 }
 
 tr_func void trVulkanEndFrame(void)

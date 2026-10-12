@@ -169,6 +169,19 @@ tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size);
 #define trPushArenaTypeZero(Arena, Type) trPushArenaArrayZero(Arena, Type, 1)
 
 /////////////////////////////////////////////////
+// NOTE(vak): Random number generator
+/////////////////////////////////////////////////
+
+typedef struct
+{
+    tr_u64 State;
+} tr_random;
+
+tr_func void trRandomSeed(tr_random* Entropy);
+tr_func tr_u32 trRandomU32(tr_random* Entropy);
+tr_func tr_f32 trRandomF32(tr_random* Entropy, tr_f32 From, tr_f32 To);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Printing
 /////////////////////////////////////////////////
 
@@ -201,6 +214,12 @@ tr_func tr_f64 trFloorF64(tr_f64 Value);
 tr_func tr_f32 trSinF32(tr_f32 X);
 tr_func tr_f32 trCosF32(tr_f32 X);
 tr_func tr_f32 trTanF32(tr_f32 X);
+
+/////////////////////////////////////////////////
+// NOTE(vak): Power & Exponential
+/////////////////////////////////////////////////
+
+tr_func tr_f32 trSquareRootF32(tr_f32 X);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Platform
