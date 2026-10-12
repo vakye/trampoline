@@ -537,6 +537,9 @@ tr_func void trLinuxWaylandPollEvents(void);
 tr_func void trLinuxWaylandPresent(void);
 tr_func tr_u32 trLinuxWaylandGetWindowWidth(void);
 tr_func tr_u32 trLinuxWaylandGetWindowHeight(void);
+tr_func tr_f32 trLinuxWaylandGetMouseX(void);
+tr_func tr_f32 trLinuxWaylandGetMouseY(void);
+tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button);
 
 tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
@@ -615,6 +618,30 @@ tr_func tr_u32 trGetWindowWidth(void)
 tr_func tr_u32 trGetWindowHeight(void)
 {
     tr_u32 Result = trLinuxWaylandGetWindowHeight();
+    return (Result);
+}
+
+tr_func tr_f32 trGetMouseX(void)
+{
+    tr_f32 Result = trLinuxWaylandGetMouseX();
+    return (Result);
+}
+
+tr_func tr_f32 trGetMouseY(void)
+{
+    tr_f32 Result = trLinuxWaylandGetMouseY();
+    return (Result);
+}
+
+tr_func tr_b32 trIsButtonDown(tr_button Button)
+{
+    tr_b32 Result = trLinuxWaylandIsButtonDown(Button);
+    return (Result);
+}
+
+tr_func tr_b32 trIsButtonUp(tr_button Button)
+{
+    tr_b32 Result = !trIsButtonDown(Button);
     return (Result);
 }
 
@@ -973,9 +1000,16 @@ typedef struct
     struct xdg_surface* XdgSurface;
     struct xdg_toplevel* XdgTopLevel;
 
+    struct wl_seat* Seat;
+    struct wl_pointer* Pointer;
+
+    tr_f32 MouseX, MouseY;
+
     tr_u32 TopLevelW, TopLevelH;
     tr_u32 WindowW, WindowH;
     tr_b32 Quit;
+
+    tr_b32 IsDown[TR_BUTTON_MAX];
 } tr_wayland_state;
 
 static tr_wayland_state trWayland = {0};
@@ -1006,6 +1040,10 @@ tr_func void trLinuxWaylandRegistryGlobal(
     if (trLinuxWaylandMatchString(InterfaceData, wl_compositor_interface.name))
     {
         trWayland.Compositor = wl_registry_bind(Registry, Name, &wl_compositor_interface, Version);
+    }
+    else if (trLinuxWaylandMatchString(InterfaceData, wl_seat_interface.name))
+    {
+        trWayland.Seat = wl_registry_bind(Registry, Name, &wl_seat_interface, Version);
     }
     else if (trLinuxWaylandMatchString(InterfaceData, xdg_wm_base_interface.name))
     {
@@ -1071,6 +1109,184 @@ tr_func void trLinuxWaylandXdgTopLevelWmCapabilities(
 {
 }
 
+tr_func void trLinuxWaylandPointerEnter(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Serial,
+    struct wl_surface* Surface,
+    wl_fixed_t SurfaceX,
+    wl_fixed_t SurfaceY
+)
+{
+    trWayland.MouseX = (tr_f32)wl_fixed_to_double(SurfaceX);
+    trWayland.MouseY = (tr_f32)wl_fixed_to_double(SurfaceY);
+}
+
+tr_func void trLinuxWaylandPointerLeave(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Serial,
+    struct wl_surface* Surface
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerMotion(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Time,
+    wl_fixed_t SurfaceX,
+    wl_fixed_t SurfaceY
+)
+{
+    trWayland.MouseX = (tr_f32)wl_fixed_to_double(SurfaceX);
+    trWayland.MouseY = (tr_f32)wl_fixed_to_double(SurfaceY);
+}
+
+tr_func void trLinuxWaylandPointerButton(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Serial,
+    tr_u32 Time,
+    tr_u32 ButtonCode,
+    tr_u32 State
+)
+{
+    tr_b32 IsDown = (State == WL_POINTER_BUTTON_STATE_PRESSED);
+    tr_button Button = TR_BUTTON_NIL;
+
+    switch (ButtonCode)
+    {
+        default: break;
+
+        // NOTE(vak): From linux/input-event-codes.h
+        //      0x110 = BTN_LEFT
+        //      0x111 = BTN_RIGHT
+        //      0x112 = BTN_MIDDLE
+
+        case 0x110: Button = TR_BUTTON_MOUSE_LEFT; break;
+        case 0x111: Button = TR_BUTTON_MOUSE_RIGHT; break;
+        case 0x112: Button = TR_BUTTON_MOUSE_MIDDLE; break;
+    }
+
+    if (Button != TR_BUTTON_NIL)
+        trWayland.IsDown[Button] = IsDown;
+}
+
+tr_func void trLinuxWaylandPointerAxis(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Time,
+    tr_u32 Axis,
+    wl_fixed_t Value
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerFrame(
+    void* Data,
+    struct wl_pointer* Pointer
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerAxisSource(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 AxisSource
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerAxisStop(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Time,
+    tr_u32 Axis
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerAxisDiscrete(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Axis,
+    tr_s32 Discrete
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerAxisValue120(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Axis,
+    tr_s32 Value120
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerAxisRelativeDirection(
+    void* Data,
+    struct wl_pointer* Pointer,
+    tr_u32 Axis,
+    tr_u32 Direction
+)
+{
+}
+
+tr_func void trLinuxWaylandPointerWarp(
+    void* Data,
+    struct wl_pointer* Pointer,
+    wl_fixed_t SurfaceX,
+    wl_fixed_t SurfaceY
+)
+{
+    trWayland.MouseX = (tr_f32)wl_fixed_to_double(SurfaceX);
+    trWayland.MouseY = (tr_f32)wl_fixed_to_double(SurfaceY);
+}
+
+tr_func void trLinuxWaylandSeatCapabilities(
+    void* Data,
+    struct wl_seat* Seat,
+    tr_u32 Capabilities
+)
+{
+    if (trWayland.Pointer)
+        wl_pointer_release(trWayland.Pointer);
+
+    if (Capabilities & WL_SEAT_CAPABILITY_POINTER)
+        trWayland.Pointer = wl_seat_get_pointer(Seat);
+
+    if (trWayland.Pointer)
+    {
+        static struct wl_pointer_listener PointerListener =
+        {
+            .enter = trLinuxWaylandPointerEnter,
+            .leave = trLinuxWaylandPointerLeave,
+            .motion = trLinuxWaylandPointerMotion,
+            .button = trLinuxWaylandPointerButton,
+            .axis = trLinuxWaylandPointerAxis,
+            .frame = trLinuxWaylandPointerFrame,
+            .axis_source = trLinuxWaylandPointerAxisSource,
+            .axis_stop = trLinuxWaylandPointerAxisStop,
+            .axis_discrete = trLinuxWaylandPointerAxisDiscrete,
+            .axis_value120 = trLinuxWaylandPointerAxisValue120,
+            .axis_relative_direction = trLinuxWaylandPointerAxisRelativeDirection,
+            .warp = trLinuxWaylandPointerWarp,
+        };
+
+        wl_pointer_add_listener(trWayland.Pointer, &PointerListener, 0);
+    }
+}
+
+tr_func void trLinuxWaylandSeatName(
+    void* Data,
+    struct wl_seat* Seat,
+    const char* Name
+)
+{
+}
+
 tr_func void trLinuxWaylandSetup(void)
 {
     trWayland.Display = wl_display_connect(0);
@@ -1090,6 +1306,17 @@ tr_func void trLinuxWaylandSetup(void)
 
     trAssert(trWayland.Compositor);
     trAssert(trWayland.XdgWmBase);
+
+    if (trWayland.Seat)
+    {
+        static struct wl_seat_listener SeatListener =
+        {
+            .capabilities = trLinuxWaylandSeatCapabilities,
+            .name = trLinuxWaylandSeatName,
+        };
+
+        wl_seat_add_listener(trWayland.Seat, &SeatListener, 0);
+    }
 
     static struct xdg_wm_base_listener XdgWmBaseListener =
     {
@@ -1155,6 +1382,26 @@ tr_func tr_u32 trLinuxWaylandGetWindowHeight(void)
 {
     tr_u32 Result = trWayland.WindowH;
     return (Result);
+}
+
+tr_func tr_f32 trLinuxWaylandGetMouseX(void)
+{
+    tr_f32 Result = trWayland.MouseX;
+    return (Result);
+}
+
+tr_func tr_f32 trLinuxWaylandGetMouseY(void)
+{
+    tr_f32 Result = trWayland.MouseY;
+    return (Result);
+}
+
+tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button)
+{
+    if ((Button == TR_BUTTON_NIL) || (Button >= TR_BUTTON_MAX))
+        return (TR_FALSE);
+
+    return trWayland.IsDown[Button];
 }
 
 #else
@@ -2183,6 +2430,54 @@ tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R,
     }
 
     trVertex2D(FirstX, FirstY, 0.0f, 0.5f, R, G, B, A);
+}
+
+tr_func void trRectOutline2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f32 Thickness, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    tr_f32 MaxX = MinX + SizeX;
+    tr_f32 MaxY = MinY + SizeY;
+
+    tr_f32 HalfThickness = 0.5f*Thickness;
+
+    // NOTE(vak): Left
+
+    trRect2D(
+        MinX - HalfThickness,
+        MinY - HalfThickness,
+        Thickness,
+        SizeY + 2.0f*HalfThickness,
+        R, G, B, A
+    );
+
+    // NOTE(vak): Right
+
+    trRect2D(
+        MaxX - HalfThickness,
+        MinY - HalfThickness,
+        Thickness,
+        SizeY + 2.0f*HalfThickness,
+        R, G, B, A
+    );
+
+    // NOTE(vak): Top
+
+    trRect2D(
+        MinX + HalfThickness,
+        MinY - HalfThickness,
+        SizeX - 2.0f*HalfThickness,
+        Thickness,
+        R, G, B, A
+    );
+
+    // NOTE(vak): Bottom
+
+    trRect2D(
+        MinX + HalfThickness,
+        MaxY - HalfThickness,
+        SizeX - 2.0f*HalfThickness,
+        Thickness,
+        R, G, B, A
+    );
 }
 
 tr_func void trVulkanEndFrame(void)

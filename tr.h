@@ -225,6 +225,17 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 
+typedef enum
+{
+    TR_BUTTON_NIL = 0,
+
+    TR_BUTTON_MOUSE_LEFT,
+    TR_BUTTON_MOUSE_RIGHT,
+    TR_BUTTON_MOUSE_MIDDLE,
+
+    TR_BUTTON_MAX,
+} tr_button;
+
 typedef tr_usize tr_clock;
 
 tr_func tr_f64 trGetTargetFPS(void);
@@ -232,6 +243,12 @@ tr_func void trSetTargetFPS(tr_f64 FPS);
 
 tr_func tr_u32 trGetWindowWidth(void);
 tr_func tr_u32 trGetWindowHeight(void);
+
+tr_func tr_f32 trGetMouseX(void);
+tr_func tr_f32 trGetMouseY(void);
+
+tr_func tr_b32 trIsButtonDown(tr_button Button);
+tr_func tr_b32 trIsButtonUp(tr_button Button);
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
@@ -259,6 +276,7 @@ tr_func void trSetClearColor(tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 tr_func void trVertex2D(tr_f32 X, tr_f32 Y, tr_f32 U, tr_f32 V, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 tr_func void trRect2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
+tr_func void trRectOutline2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f32 Thickness, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation
