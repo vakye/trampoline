@@ -2480,6 +2480,50 @@ tr_func void trRectOutline2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 Size
     );
 }
 
+tr_func void trCircleOutline2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 Thickness, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    tr_f32 InnerRadius = Radius - 0.5f*Thickness;
+    tr_f32 OuterRadius = Radius + 0.5f*Thickness;
+
+    tr_u32 PointCount = 32;
+    tr_f32 OutersX[32] = {0};
+    tr_f32 OutersY[32] = {0};
+    tr_f32 InnersX[32] = {0};
+    tr_f32 InnersY[32] = {0};
+
+    for (tr_u32 Index = 0; Index < 32; Index++)
+    {
+        tr_f32 OuterT = (tr_f32)Index / (tr_f32)PointCount;
+        tr_f32 InnerT = ((tr_f32)Index + 0.5f) / (tr_f32)PointCount;
+
+        tr_f32 OuterC = trCosF32(OuterT);
+        tr_f32 OuterS = trSinF32(OuterT);
+
+        tr_f32 InnerC = trCosF32(InnerT);
+        tr_f32 InnerS = trSinF32(InnerT);
+
+        OutersX[Index] = CenterX - OuterRadius*OuterC;
+        OutersY[Index] = CenterY + OuterRadius*OuterS;
+
+        InnersX[Index] = CenterX - InnerRadius*InnerC;
+        InnersY[Index] = CenterY + InnerRadius*InnerS;
+    }
+
+    for (tr_u32 Index = 0; Index < PointCount; Index++)
+    {
+        tr_u32 Index0 = Index;
+        tr_u32 Index1 = (Index + 1) % PointCount;
+
+        trVertex2D(OutersX[Index0], OutersY[Index0], 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(InnersX[Index0], InnersY[Index0], 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(OutersX[Index1], OutersY[Index1], 0.0f, 0.0f, R, G, B, A);
+
+        trVertex2D(OutersX[Index1], OutersY[Index1], 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(InnersX[Index0], InnersY[Index0], 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(InnersX[Index1], InnersY[Index1], 0.0f, 0.0f, R, G, B, A);
+    }
+}
+
 tr_func void trVulkanEndFrame(void)
 {
     VkCommandBufferBeginInfo BeginInfo =

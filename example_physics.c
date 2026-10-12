@@ -45,6 +45,41 @@ void Setup(void)
 
 void Frame(tr_f32 DeltaTime)
 {
+    // NOTE(vak): Do mouse picking
+
+    static body* PickingBody = 0;
+
+    tr_f32 MouseX = trGetMouseX();
+    tr_f32 MouseY = trGetMouseY();
+
+    body* HoveringBody = 0;
+
+    for (tr_usize Index = 0; Index < BODY_COUNT; Index++)
+    {
+        body* Body = Bodies + Index;
+
+        tr_f32 DeltaX = Body->X - MouseX;
+        tr_f32 DeltaY = Body->Y - MouseY;
+
+        tr_f32 Distance = trSquareRootF32(
+            DeltaX*DeltaX +
+            DeltaY*DeltaY
+        );
+
+        if (Distance < Body->Radius)
+            HoveringBody = Body;
+    }
+
+    if (trIsButtonDown(TR_BUTTON_MOUSE_LEFT))
+    {
+        if (HoveringBody && !PickingBody)
+            PickingBody = HoveringBody;
+    }
+    else
+    {
+        PickingBody = 0;
+    }
+
     static tr_f32 AccumulatedTime = 0.0f;
 
     // NOTE(vak): Maintain fixed simulation time step
@@ -57,19 +92,38 @@ void Frame(tr_f32 DeltaTime)
 
     while (AccumulatedTime >= TimeStep)
     {
+        // NOTE(vak): Mouse picking force
+
+        if (PickingBody)
+        {
+            tr_f32 Friction = 20.0f;
+            tr_f32 Force = Friction * 16.0f;
+
+            tr_f32 DeltaX = MouseX - PickingBody->X;
+            tr_f32 DeltaY = MouseY - PickingBody->Y;
+
+            PickingBody->DDX += Force*DeltaX - Friction*PickingBody->DX;
+            PickingBody->DDY += Force*DeltaY - Friction*PickingBody->DY;
+        }
+
         // NOTE(vak): Integrate forces
 
         for (tr_usize Index = 0; Index < BODY_COUNT; Index++)
         {
             body* Body = Bodies + Index;
 
-            Body->DDY = 500.0; // NOTE(vak): Gravity
+            Body->DDY += 500.0; // NOTE(vak): Gravity
 
             Body->DX += Body->DDX * TimeStep;
             Body->DY += Body->DDY * TimeStep;
 
             Body->X += Body->DX * TimeStep;
             Body->Y += Body->DY * TimeStep;
+
+            // NOTE(vak): Reset force
+
+            Body->DDX = 0.0f;
+            Body->DDY = 0.0f;
         }
 
         // NOTE(vak): Solve constraints (collisions, ...) using the Jacobi
@@ -166,6 +220,19 @@ void Frame(tr_f32 DeltaTime)
         }
 
         AccumulatedTime -= TimeStep;
+    }
+
+    // NOTE(vak): Mouse picking outline
+
+    if (PickingBody || HoveringBody)
+    {
+        body* Body = (PickingBody) ? (PickingBody) : (HoveringBody);
+
+        trCircleOutline2D(
+            Body->X, Body->Y, Body->Radius,
+            15.0f,
+            0.6f, 0.8f, 1.0f, 0.7f + 0.3f*(PickingBody != 0)
+        );
     }
 
     // NOTE(vak): Draw bodies to the screen
