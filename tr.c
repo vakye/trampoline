@@ -1142,6 +1142,8 @@ typedef struct
     VkImageView* SwapchainImageViews;
 
     tr_u32 ImageIndex;
+    tr_u32 VertexCount;
+    tr_f32 ClearColor[4];
 } tr_vulkan_state;
 
 static tr_vulkan_state trVulkan = {0};
@@ -1952,18 +1954,57 @@ tr_func void trVulkanBeginFrame(void)
         0,
         &trVulkan.ImageIndex
     ));
+
+    trVulkan.VertexCount = 0;
+    trVulkan.ClearColor[0] = 0.0f;
+    trVulkan.ClearColor[1] = 0.0f;
+    trVulkan.ClearColor[2] = 0.0f;
+    trVulkan.ClearColor[3] = 1.0f;
+}
+
+tr_func void trSetClearColor(tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    trVulkan.ClearColor[0] = R;
+    trVulkan.ClearColor[1] = G;
+    trVulkan.ClearColor[2] = B;
+    trVulkan.ClearColor[3] = A;
+}
+
+tr_func void trVertex2D(tr_f32 X, tr_f32 Y, tr_f32 U, tr_f32 V, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    tr_usize MaxVertexCount = trVulkan.VertexBufferSize / sizeof(tr_vulkan_vertex);
+
+    trAssert(trVulkan.VertexCount < MaxVertexCount);
+
+    tr_vulkan_vertex* Vertex = trVulkan.MappedVertices + trVulkan.VertexCount;
+
+    Vertex->X = X;
+    Vertex->Y = Y;
+
+    Vertex->U = U;
+    Vertex->V = V;
+
+    Vertex->R = R;
+    Vertex->G = G;
+    Vertex->B = B;
+    Vertex->A = A;
+
+    trVulkan.VertexCount++;
+}
+
+tr_func void trRect2D(tr_f32 MinX, tr_f32 MinY, tr_f32 MaxX, tr_f32 MaxY, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    trVertex2D(MinX, MinY, 0.0f, 0.0f, R, G, B, A);
+    trVertex2D(MinX, MaxY, 0.0f, 1.0f, R, G, B, A);
+    trVertex2D(MaxX, MaxY, 1.0f, 1.0f, R, G, B, A);
+
+    trVertex2D(MaxX, MaxY, 1.0f, 1.0f, R, G, B, A);
+    trVertex2D(MaxX, MinY, 1.0f, 0.0f, R, G, B, A);
+    trVertex2D(MinX, MinY, 0.0f, 0.0f, R, G, B, A);
 }
 
 tr_func void trVulkanEndFrame(void)
 {
-    {
-        tr_vulkan_vertex* V = trVulkan.MappedVertices;
-
-        V[0] = (tr_vulkan_vertex){-0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f};
-        V[1] = (tr_vulkan_vertex){+0.0f, +0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f};
-        V[2] = (tr_vulkan_vertex){+0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f};
-    }
-
     VkCommandBufferBeginInfo BeginInfo =
     {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -2022,56 +2063,65 @@ tr_func void trVulkanEndFrame(void)
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .clearValue =
                 {
-                    .color = {.float32 = {0.07f, 0.08f, 0.1f, 1.0f}},
+                    .color = {.float32 =
+                    {
+                        [0] = trVulkan.ClearColor[0],
+                        [1] = trVulkan.ClearColor[1],
+                        [2] = trVulkan.ClearColor[2],
+                        [3] = trVulkan.ClearColor[3],
+                    }},
                 },
             },
         };
 
         vkCmdBeginRendering(trVulkan.CommandBuffer, &RenderingInfo);
 
-        VkViewport Viewport =
+        if (trVulkan.VertexCount > 0)
         {
-            .x = 0,
-            .y = 0,
-            .width = (tr_f32)trVulkan.SwapchainExtent.width,
-            .height = (tr_f32)trVulkan.SwapchainExtent.height,
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-
-        VkRect2D Scissor = RenderingInfo.renderArea;
-
-        vkCmdBindPipeline(trVulkan.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trVulkan.Pipeline);
-        vkCmdSetViewport(trVulkan.CommandBuffer, 0, 1, &Viewport);
-        vkCmdSetScissor(trVulkan.CommandBuffer, 0, 1, &Scissor);
-
-        VkWriteDescriptorSet DescriptorWrites[] =
-        {
+            VkViewport Viewport =
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &(VkDescriptorBufferInfo)
+                .x = 0,
+                .y = 0,
+                .width = (tr_f32)trVulkan.SwapchainExtent.width,
+                .height = (tr_f32)trVulkan.SwapchainExtent.height,
+                .minDepth = 0.0f,
+                .maxDepth = 1.0f,
+            };
+
+            VkRect2D Scissor = RenderingInfo.renderArea;
+
+            vkCmdBindPipeline(trVulkan.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trVulkan.Pipeline);
+            vkCmdSetViewport(trVulkan.CommandBuffer, 0, 1, &Viewport);
+            vkCmdSetScissor(trVulkan.CommandBuffer, 0, 1, &Scissor);
+
+            VkWriteDescriptorSet DescriptorWrites[] =
+            {
                 {
-                    .buffer = trVulkan.VertexBuffer,
-                    .offset = 0,
-                    .range = trVulkan.VertexBufferSize,
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pBufferInfo = &(VkDescriptorBufferInfo)
+                    {
+                        .buffer = trVulkan.VertexBuffer,
+                        .offset = 0,
+                        .range = trVulkan.VertexBufferSize,
+                    },
                 },
-            },
-        };
+            };
 
-        vkCmdPushDescriptorSet(
-            trVulkan.CommandBuffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            trVulkan.PipelineLayout,
-            0,
-            TR_ARRAY_COUNT(DescriptorWrites),
-            DescriptorWrites
-        );
+            vkCmdPushDescriptorSet(
+                trVulkan.CommandBuffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                trVulkan.PipelineLayout,
+                0,
+                TR_ARRAY_COUNT(DescriptorWrites),
+                DescriptorWrites
+            );
 
-        vkCmdDraw(trVulkan.CommandBuffer, 3, 1, 0, 0);
+            vkCmdDraw(trVulkan.CommandBuffer, trVulkan.VertexCount, 1, 0, 0);
+        }
 
         vkCmdEndRendering(trVulkan.CommandBuffer);
     }

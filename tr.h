@@ -215,6 +215,14 @@ tr_func void trDecommitMemory(void* At, tr_usize Size);
 tr_func void trExit(tr_u8 ExitCode);
 
 /////////////////////////////////////////////////
+// NOTE(vak): Renderer
+/////////////////////////////////////////////////
+
+tr_func void trSetClearColor(tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
+tr_func void trVertex2D(tr_f32 X, tr_f32 Y, tr_f32 U, tr_f32 V, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
+tr_func void trRect2D(tr_f32 MinX, tr_f32 MinY, tr_f32 MaxX, tr_f32 MaxY, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Implementation
 /////////////////////////////////////////////////
 
