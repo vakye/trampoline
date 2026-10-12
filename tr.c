@@ -327,6 +327,84 @@ tr_func tr_f64 trFloorF64(tr_f64 Value)
 }
 
 /////////////////////////////////////////////////
+// NOTE(vak): Trigonometry
+/////////////////////////////////////////////////
+
+tr_func tr_f32 trSinF32(tr_f32 X)
+{
+    tr_s32 K = (tr_s32)(X * 2.0f);
+
+    X = X - 0.5f*K;
+    X = X * 6.28318530717958647693f; // NOTE(vak): 2PI
+
+    // NOTE(vak): Taken from Sin, rel. error minimized, degree 9
+    // at https://publik-void.github.io/sin-cos-approximations/
+
+    static tr_f32 Coefficients[5] =
+    {
+        +0.9999999946860073367523161202596403177040898496501611216768f,
+        -0.1666665668400715135906952699991284533668603175829321974375f,
+        +0.0083330251389693672984848155313618031435079212166530368507f,
+        -0.0001980741872742697087457411410886410708022403778296896364f,
+        +2.6019030676514601858250088533777315352551909009268267e-6f,
+    };
+
+    tr_f32 XX = X * X;
+
+    tr_f32 Y = Coefficients[4] * XX;
+    Y = (Y + Coefficients[3]) * XX;
+    Y = (Y + Coefficients[2]) * XX;
+    Y = (Y + Coefficients[1]) * XX;
+    Y = (Y + Coefficients[0]) * X;
+
+    tr_f32 Negate = 1.0f - 2.0f*(K & 1);
+    tr_f32 Result = Y * Negate;
+
+    return (Result);
+}
+
+tr_func tr_f32 trCosF32(tr_f32 X)
+{
+    tr_s32 K = (tr_s32)(X * 2.0f);
+
+    X = X - 0.5f*K;
+    X = X * 6.28318530717958647693f; // NOTE(vak): 2PI
+
+    // NOTE(vak): Taken from Cos, rel. error minimized, degree 10
+    // at https://publik-void.github.io/sin-cos-approximations/
+
+    static tr_f32 Coefficients[6] =
+    {
+        +0.9999999990181006763221859215241467592343833431607956876104f,
+        -0.4999999804925358106448883126472417799170538129969117112355f,
+        +0.0416665985274352494970529831079268817924347682625283903769f,
+        -0.0013887969715117499354050093607473354568100294068286064696f,
+        +0.0000247432468979897784677199531432331700043016419859875338f,
+        -2.579241831825205598039811545787635083596569894942531e-7f,
+    };
+
+    tr_f32 XX = X * X;
+
+    tr_f32 Y = Coefficients[5] * XX;
+    Y = (Y + Coefficients[4]) * XX;
+    Y = (Y + Coefficients[3]) * XX;
+    Y = (Y + Coefficients[2]) * XX;
+    Y = (Y + Coefficients[1]) * XX;
+    Y = (Y + Coefficients[0]);
+
+    tr_f32 Negate = 1.0f - 2.0f*(K & 1);
+    tr_f32 Result = Y * Negate;
+
+    return (Result);
+}
+
+tr_func tr_f32 trTanF32(tr_f32 X)
+{
+    tr_f32 Result = trSinF32(X) / trCosF32(X);
+    return (Result);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Windows Implementation
 /////////////////////////////////////////////////
 

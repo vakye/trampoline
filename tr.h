@@ -190,6 +190,19 @@ tr_func tr_f32 trFloorF32(tr_f32 Value);
 tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 /////////////////////////////////////////////////
+// NOTE(vak): Trigonometry
+// Please note that these functions take in
+// normalized arguments:
+//      X=0   -> 0   radians
+//      X=0.5 -> pi  radians
+//      X=1   -> 2pi radians
+/////////////////////////////////////////////////
+
+tr_func tr_f32 trSinF32(tr_f32 X);
+tr_func tr_f32 trCosF32(tr_f32 X);
+tr_func tr_f32 trTanF32(tr_f32 X);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 
