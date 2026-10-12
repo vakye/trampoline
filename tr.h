@@ -3,6 +3,28 @@
 #define __TR_H__ 1
 
 /////////////////////////////////////////////////
+// NOTE(vak): Architecture
+/////////////////////////////////////////////////
+
+#if defined(__x86_64) || defined(__x86_64__) || \
+    defined(__amd64) || defined(__amd64__) || \
+    defined(_M_AMD64) || defined(_M_X64)
+    #define TR_ARCHITECTURE_X64 (1)
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    #define TR_ARCHITECTURE_ARM64 (1)
+#else
+    #error Unknown architecture
+#endif
+
+#if !defined(TR_ARCHITECTURE_X64)
+    #define TR_ARCHITECTURE_X64 (0)
+#endif
+
+#if !defined(TR_ARCHITECTURE_ARM64)
+    #define TR_ARCHITECTURE_ARM64 (0)
+#endif
+
+/////////////////////////////////////////////////
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 

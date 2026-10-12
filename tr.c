@@ -1,5 +1,11 @@
 
-#include <immintrin.h>
+/////////////////////////////////////////////////
+// NOTE(vak): Intrinsics
+/////////////////////////////////////////////////
+
+#if TR_ARCHITECTURE_X64
+    #include <immintrin.h>
+#endif
 
 /////////////////////////////////////////////////
 // NOTE(vak): Memory
@@ -302,13 +308,21 @@ tr_func tr_usize trPrintF64(tr_f64 Value)
 
 tr_func tr_f32 trFloorF32(tr_f32 Value)
 {
+#if TR_ARCHITECTURE_X64
     tr_f32 Result = _mm_cvtss_f32(_mm_floor_ps(_mm_set_ss(Value)));
+#else
+    #error Fallback implementation not yet written for trFloorF32
+#endif
     return (Result);
 }
 
 tr_func tr_f64 trFloorF64(tr_f64 Value)
 {
+#if TR_ARCHITECTURE_X64
     tr_f64 Result = _mm_cvtsd_f64(_mm_floor_pd(_mm_set_sd(Value)));
+#else
+    #error Fallback implementation not yet written for trFloorF64
+#endif
     return (Result);
 }
 
@@ -327,13 +341,17 @@ tr_func tr_f64 trFloorF64(tr_f64 Value)
 
 #include <dlfcn.h> // NOTE(vak): For loading libvulkan.so
 
-#define TR_LINUX_SYSCALL_NR_WRITE           (1)
-#define TR_LINUX_SYSCALL_NR_MMAP            (9)
-#define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
-#define TR_LINUX_SYSCALL_NR_NANOSLEEP       (35)
-#define TR_LINUX_SYSCALL_NR_EXIT            (60)
-#define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
-#define TR_LINUX_SYSCALL_NR_EXIT_GROUP      (231)
+#if TR_ARCHITECTURE_X64
+    #define TR_LINUX_SYSCALL_NR_WRITE           (1)
+    #define TR_LINUX_SYSCALL_NR_MMAP            (9)
+    #define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
+    #define TR_LINUX_SYSCALL_NR_NANOSLEEP       (35)
+    #define TR_LINUX_SYSCALL_NR_EXIT            (60)
+    #define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
+    #define TR_LINUX_SYSCALL_NR_EXIT_GROUP      (231)
+#else
+    #error Linux syscall numbers are not defined for this architecture
+#endif
 
 static tr_usize trLinuxSyscall(
     tr_usize NR,
@@ -343,6 +361,7 @@ static tr_usize trLinuxSyscall(
 {
     tr_usize Result = 0;
 
+#if TR_ARCHITECTURE_X64
     register tr_usize R10 __asm__("r10") = Arg3;
     register tr_usize R8  __asm__("r8")  = Arg4;
     register tr_usize R9  __asm__("r9")  = Arg5;
@@ -360,6 +379,9 @@ static tr_usize trLinuxSyscall(
         "r"(R9) :
         "memory", "rcx", "r11"
     );
+#else
+    #error Linux syscall is not implemented for this architecture
+#endif
 
     return (Result);
 }
@@ -367,6 +389,7 @@ static tr_usize trLinuxSyscall(
 __attribute__((naked))
 void trEntryPoint(void)
 {
+#if TR_ARCHITECTURE_X64
     __asm__ volatile
     (
         "mov 0 (%rsp),          %edi\n"
@@ -374,9 +397,13 @@ void trEntryPoint(void)
         "lea 16(%rsp, %rdi, 8), %rdx\n"
         "call trLinuxBootstrap\n"
     );
+#else
+    #error Linux entry point is not implemented for this architecture
+#endif
 }
 
 void Setup(void); // NOTE(vak): Implemented by user
+void Frame(tr_f32 DeltaTime); // NOTE(vak): Implemented by user
 
 tr_func void trLinuxWaylandSetup(void);
 tr_func tr_b32 trLinuxWaylandShouldQuit(void);
@@ -439,7 +466,7 @@ void trLinuxBootstrap(tr_s32 ArgCount, char* Args[], char* Envp[])
 
 int main(tr_s32 ArgCount, char* Args[], char* Envp[])
 {
-    Setup();
+    trLinuxBootstrap(ArgCount, Args, Envp);
     return (0);
 }
 
