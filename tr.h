@@ -229,11 +229,17 @@ tr_func void trExit(tr_u8 ExitCode);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Renderer
+// All coordinates are assumed to be screen
+// coordinates where:
+//      Origin (0, 0) is at top-left
+//      Positive X goes right
+//      Positive Y goes down
 /////////////////////////////////////////////////
 
 tr_func void trSetClearColor(tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 tr_func void trVertex2D(tr_f32 X, tr_f32 Y, tr_f32 U, tr_f32 V, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 tr_func void trRect2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
+tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation

@@ -2106,6 +2106,37 @@ tr_func void trRect2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f
     trVertex2D(MinX, MinY, 0.0f, 0.0f, R, G, B, A);
 }
 
+tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
+{
+    tr_u32 PointCount = 32;
+
+    tr_f32 FirstX = CenterX - Radius;
+    tr_f32 FirstY = CenterY;
+
+    trVertex2D(CenterX, CenterY, 0.5f, 0.5f, R, G, B, A);
+    trVertex2D(FirstX,  FirstY,  0.0f, 0.5f, R, G, B, A);
+
+    for (tr_u32 Index = 1; Index < PointCount; Index++)
+    {
+        tr_f32 T = (tr_f32)Index / (tr_f32)PointCount;
+
+        tr_f32 C = trCosF32(T);
+        tr_f32 S = trSinF32(T);
+
+        tr_f32 U = 0.5f - 0.5f*C;
+        tr_f32 V = 0.5f + 0.5f*S;
+
+        tr_f32 X = CenterX - Radius*C;
+        tr_f32 Y = CenterY + Radius*S;
+
+        trVertex2D(X, Y, U, V, R, G, B, A);
+        trVertex2D(CenterX, CenterY, 0.5f, 0.5f, R, G, B, A);
+        trVertex2D(X, Y, U, V, R, G, B, A);
+    }
+
+    trVertex2D(FirstX,  FirstY, 0.0f, 0.5f, R, G, B, A);
+}
+
 tr_func void trVulkanEndFrame(void)
 {
     VkCommandBufferBeginInfo BeginInfo =
