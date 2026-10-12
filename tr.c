@@ -1065,6 +1065,10 @@ static PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion = 0;
     X(vkCreateCommandPool) \
     X(vkAllocateCommandBuffers) \
     X(vkCreateSemaphore) \
+    X(vkCreatePipelineLayout) \
+    X(vkCreateShaderModule) \
+    X(vkDestroyShaderModule) \
+    X(vkCreateGraphicsPipelines) \
     X(vkCreateImageView) \
     X(vkDestroyImageView) \
     X(vkCreateSwapchainKHR) \
@@ -1074,6 +1078,12 @@ static PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion = 0;
     X(vkResetCommandBuffer) \
     X(vkBeginCommandBuffer) \
     X(vkEndCommandBuffer) \
+    X(vkCmdBeginRendering) \
+    X(vkCmdEndRendering) \
+    X(vkCmdBindPipeline) \
+    X(vkCmdSetViewport) \
+    X(vkCmdSetScissor) \
+    X(vkCmdDraw) \
     X(vkCmdPipelineBarrier) \
     X(vkQueueSubmit) \
     X(vkQueuePresentKHR)
@@ -1099,6 +1109,8 @@ typedef struct
     VkSemaphore SubmitSemaphore;
     VkSurfaceFormatKHR SwapchainFormat;
     VkPresentModeKHR PresentMode;
+    VkPipelineLayout PipelineLayout;
+    VkPipeline Pipeline;
 
     VkExtent2D SwapchainExtent;
     VkSwapchainKHR Swapchain;
@@ -1313,9 +1325,16 @@ tr_func void trVulkanSetup(void)
             "VK_KHR_swapchain",
         };
 
+        VkPhysicalDeviceVulkan13Features Vulkan13Features =
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .dynamicRendering = VK_TRUE,
+        };
+
         VkDeviceCreateInfo DeviceInfo =
         {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &Vulkan13Features,
             .queueCreateInfoCount = 1,
             .pQueueCreateInfos = &(VkDeviceQueueCreateInfo)
             {
@@ -1446,6 +1465,246 @@ tr_func void trVulkanSetup(void)
         trVulkan.SwapchainImages = trPushArenaArrayZero(&trVulkan.Arena, VkImage, trVulkan.MaxImageCount);
         trVulkan.SwapchainImageViews = trPushArenaArrayZero(&trVulkan.Arena, VkImageView, trVulkan.MaxImageCount);
     }
+
+    // NOTE(vak): Pipeline layout
+    {
+        VkPipelineLayoutCreateInfo LayoutInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        };
+
+        TR_VK_CHECK(vkCreatePipelineLayout(trVulkan.Device, &LayoutInfo, 0, &trVulkan.PipelineLayout));
+    }
+
+    // NOTE(vak): Pipeline
+    {
+        static tr_u32 VertexCode[] =
+        {
+            // NOTE(vak): SPIRV compiled from vulkan_default.vert
+            0x07230203,0x00010600,0x0008000b,0x00000037,0x00000000,0x00020011,0x00000001,0x0006000b,
+            0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
+            0x000a000f,0x00000000,0x00000004,0x6e69616d,0x00000000,0x0000000c,0x00000017,0x00000021,
+            0x00000025,0x00000031,0x00030003,0x00000002,0x000001c2,0x00040005,0x00000004,0x6e69616d,
+            0x00000000,0x00050005,0x0000000c,0x69736f50,0x6e6f6974,0x00000073,0x00040005,0x00000017,
+            0x6f6c6f43,0x00007372,0x00060005,0x0000001f,0x505f6c67,0x65567265,0x78657472,0x00000000,
+            0x00060006,0x0000001f,0x00000000,0x505f6c67,0x7469736f,0x006e6f69,0x00070006,0x0000001f,
+            0x00000001,0x505f6c67,0x746e696f,0x657a6953,0x00000000,0x00070006,0x0000001f,0x00000002,
+            0x435f6c67,0x4470696c,0x61747369,0x0065636e,0x00070006,0x0000001f,0x00000003,0x435f6c67,
+            0x446c6c75,0x61747369,0x0065636e,0x00030005,0x00000021,0x00000000,0x00060005,0x00000025,
+            0x565f6c67,0x65747265,0x646e4978,0x00007865,0x00070005,0x0000002f,0x74726556,0x68537865,
+            0x72656461,0x7074754f,0x00007475,0x00050006,0x0000002f,0x00000000,0x6f6c6f43,0x00000072,
+            0x00030005,0x00000031,0x0074754f,0x00030047,0x0000001f,0x00000002,0x00050048,0x0000001f,
+            0x00000000,0x0000000b,0x00000000,0x00050048,0x0000001f,0x00000001,0x0000000b,0x00000001,
+            0x00050048,0x0000001f,0x00000002,0x0000000b,0x00000003,0x00050048,0x0000001f,0x00000003,
+            0x0000000b,0x00000004,0x00040047,0x00000025,0x0000000b,0x0000002a,0x00030047,0x0000002f,
+            0x00000002,0x00040047,0x00000031,0x0000001e,0x00000000,0x00020013,0x00000002,0x00030021,
+            0x00000003,0x00000002,0x00030016,0x00000006,0x00000020,0x00040017,0x00000007,0x00000006,
+            0x00000002,0x00040015,0x00000008,0x00000020,0x00000000,0x0004002b,0x00000008,0x00000009,
+            0x00000003,0x0004001c,0x0000000a,0x00000007,0x00000009,0x00040020,0x0000000b,0x00000006,
+            0x0000000a,0x0004003b,0x0000000b,0x0000000c,0x00000006,0x0004002b,0x00000006,0x0000000d,
+            0xbf000000,0x0005002c,0x00000007,0x0000000e,0x0000000d,0x0000000d,0x0004002b,0x00000006,
+            0x0000000f,0x00000000,0x0004002b,0x00000006,0x00000010,0x3f000000,0x0005002c,0x00000007,
+            0x00000011,0x0000000f,0x00000010,0x0005002c,0x00000007,0x00000012,0x00000010,0x0000000d,
+            0x0006002c,0x0000000a,0x00000013,0x0000000e,0x00000011,0x00000012,0x00040017,0x00000014,
+            0x00000006,0x00000004,0x0004001c,0x00000015,0x00000014,0x00000009,0x00040020,0x00000016,
+            0x00000006,0x00000015,0x0004003b,0x00000016,0x00000017,0x00000006,0x0004002b,0x00000006,
+            0x00000018,0x3f800000,0x0007002c,0x00000014,0x00000019,0x00000018,0x0000000f,0x0000000f,
+            0x00000018,0x0007002c,0x00000014,0x0000001a,0x0000000f,0x00000018,0x0000000f,0x00000018,
+            0x0007002c,0x00000014,0x0000001b,0x0000000f,0x0000000f,0x00000018,0x00000018,0x0006002c,
+            0x00000015,0x0000001c,0x00000019,0x0000001a,0x0000001b,0x0004002b,0x00000008,0x0000001d,
+            0x00000001,0x0004001c,0x0000001e,0x00000006,0x0000001d,0x0006001e,0x0000001f,0x00000014,
+            0x00000006,0x0000001e,0x0000001e,0x00040020,0x00000020,0x00000003,0x0000001f,0x0004003b,
+            0x00000020,0x00000021,0x00000003,0x00040015,0x00000022,0x00000020,0x00000001,0x0004002b,
+            0x00000022,0x00000023,0x00000000,0x00040020,0x00000024,0x00000001,0x00000022,0x0004003b,
+            0x00000024,0x00000025,0x00000001,0x00040020,0x00000027,0x00000006,0x00000007,0x00040020,
+            0x0000002d,0x00000003,0x00000014,0x0003001e,0x0000002f,0x00000014,0x00040020,0x00000030,
+            0x00000003,0x0000002f,0x0004003b,0x00000030,0x00000031,0x00000003,0x00040020,0x00000033,
+            0x00000006,0x00000014,0x00050036,0x00000002,0x00000004,0x00000000,0x00000003,0x000200f8,
+            0x00000005,0x0003003e,0x0000000c,0x00000013,0x0003003e,0x00000017,0x0000001c,0x0004003d,
+            0x00000022,0x00000026,0x00000025,0x00050041,0x00000027,0x00000028,0x0000000c,0x00000026,
+            0x0004003d,0x00000007,0x00000029,0x00000028,0x00050051,0x00000006,0x0000002a,0x00000029,
+            0x00000000,0x00050051,0x00000006,0x0000002b,0x00000029,0x00000001,0x00070050,0x00000014,
+            0x0000002c,0x0000002a,0x0000002b,0x0000000f,0x00000018,0x00050041,0x0000002d,0x0000002e,
+            0x00000021,0x00000023,0x0003003e,0x0000002e,0x0000002c,0x0004003d,0x00000022,0x00000032,
+            0x00000025,0x00050041,0x00000033,0x00000034,0x00000017,0x00000032,0x0004003d,0x00000014,
+            0x00000035,0x00000034,0x00050041,0x0000002d,0x00000036,0x00000031,0x00000023,0x0003003e,
+            0x00000036,0x00000035,0x000100fd,0x00010038
+        };
+
+        static tr_u32 FragmentCode[] =
+        {
+            // NOTE(vak): SPIRV compiled from vulkan_default.frag
+            0x07230203,0x00010600,0x0008000b,0x00000012,0x00000000,0x00020011,0x00000001,0x0006000b,
+            0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
+            0x0007000f,0x00000004,0x00000004,0x6e69616d,0x00000000,0x00000009,0x0000000c,0x00030010,
+            0x00000004,0x00000007,0x00030003,0x00000002,0x000001c2,0x00040005,0x00000004,0x6e69616d,
+            0x00000000,0x00060005,0x00000009,0x67617246,0x746e656d,0x6f6c6f43,0x00000072,0x00070005,
+            0x0000000a,0x74726556,0x68537865,0x72656461,0x7074754f,0x00007475,0x00050006,0x0000000a,
+            0x00000000,0x6f6c6f43,0x00000072,0x00030005,0x0000000c,0x00006e49,0x00040047,0x00000009,
+            0x0000001e,0x00000000,0x00030047,0x0000000a,0x00000002,0x00040047,0x0000000c,0x0000001e,
+            0x00000000,0x00020013,0x00000002,0x00030021,0x00000003,0x00000002,0x00030016,0x00000006,
+            0x00000020,0x00040017,0x00000007,0x00000006,0x00000004,0x00040020,0x00000008,0x00000003,
+            0x00000007,0x0004003b,0x00000008,0x00000009,0x00000003,0x0003001e,0x0000000a,0x00000007,
+            0x00040020,0x0000000b,0x00000001,0x0000000a,0x0004003b,0x0000000b,0x0000000c,0x00000001,
+            0x00040015,0x0000000d,0x00000020,0x00000001,0x0004002b,0x0000000d,0x0000000e,0x00000000,
+            0x00040020,0x0000000f,0x00000001,0x00000007,0x00050036,0x00000002,0x00000004,0x00000000,
+            0x00000003,0x000200f8,0x00000005,0x00050041,0x0000000f,0x00000010,0x0000000c,0x0000000e,
+            0x0004003d,0x00000007,0x00000011,0x00000010,0x0003003e,0x00000009,0x00000011,0x000100fd,
+            0x00010038
+        };
+
+        VkShaderModuleCreateInfo VertexModuleInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pCode = VertexCode,
+            .codeSize = sizeof(VertexCode),
+        };
+
+        VkShaderModuleCreateInfo FragmentModuleInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pCode = FragmentCode,
+            .codeSize = sizeof(FragmentCode),
+        };
+
+        VkShaderModule VertexModule = {0};
+        VkShaderModule FragmentModule = {0};
+
+        TR_VK_CHECK(vkCreateShaderModule(trVulkan.Device, &VertexModuleInfo, 0, &VertexModule));
+        TR_VK_CHECK(vkCreateShaderModule(trVulkan.Device, &FragmentModuleInfo, 0, &FragmentModule));
+
+        VkPipelineShaderStageCreateInfo StageInfos[] =
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .module = VertexModule,
+                .stage = VK_SHADER_STAGE_VERTEX_BIT,
+                .pName = "main",
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .module = FragmentModule,
+                .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pName = "main",
+            },
+        };
+
+        VkPipelineRenderingCreateInfo RenderingInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &trVulkan.SwapchainFormat.format,
+        };
+
+        VkPipelineVertexInputStateCreateInfo VertexInputState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        };
+
+        VkPipelineInputAssemblyStateCreateInfo InputAssemblyState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
+
+        VkPipelineTessellationStateCreateInfo TessellationState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+        };
+
+        VkPipelineViewportStateCreateInfo ViewportState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .pViewports = &(VkViewport){0},
+            .scissorCount = 1,
+            .pScissors = &(VkRect2D){0},
+        };
+
+        VkPipelineRasterizationStateCreateInfo RasterizationState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .lineWidth = 1.0f,
+        };
+
+        VkPipelineMultisampleStateCreateInfo MultisampleState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
+
+        VkPipelineDepthStencilStateCreateInfo DepthStencilState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        };
+
+        VkPipelineColorBlendStateCreateInfo ColorBlendState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount = 1,
+            .pAttachments = &(VkPipelineColorBlendAttachmentState)
+            {
+                .blendEnable = VK_TRUE,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VK_BLEND_OP_ADD,
+                .colorWriteMask =
+                    VK_COLOR_COMPONENT_R_BIT |
+                    VK_COLOR_COMPONENT_G_BIT |
+                    VK_COLOR_COMPONENT_B_BIT |
+                    VK_COLOR_COMPONENT_A_BIT,
+            },
+        };
+
+        VkDynamicState DynamicStates[] =
+        {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        VkPipelineDynamicStateCreateInfo DynamicState =
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = TR_ARRAY_COUNT(DynamicStates),
+            .pDynamicStates = DynamicStates,
+        };
+
+        VkGraphicsPipelineCreateInfo PipelineInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &RenderingInfo,
+            .stageCount = TR_ARRAY_COUNT(StageInfos),
+            .pStages = StageInfos,
+            .pVertexInputState = &VertexInputState,
+            .pInputAssemblyState = &InputAssemblyState,
+            .pTessellationState = &TessellationState,
+            .pViewportState = &ViewportState,
+            .pRasterizationState = &RasterizationState,
+            .pMultisampleState = &MultisampleState,
+            .pDepthStencilState = &DepthStencilState,
+            .pColorBlendState = &ColorBlendState,
+            .pDynamicState = &DynamicState,
+            .layout = trVulkan.PipelineLayout,
+        };
+
+        TR_VK_CHECK(vkCreateGraphicsPipelines(
+            trVulkan.Device,
+            0,
+            1,
+            &PipelineInfo,
+            0,
+            &trVulkan.Pipeline
+        ));
+
+        vkDestroyShaderModule(trVulkan.Device, FragmentModule, 0);
+        vkDestroyShaderModule(trVulkan.Device, VertexModule, 0);
+    }
 }
 
 tr_func void trVulkanBeginFrame(void)
@@ -1552,32 +1811,110 @@ tr_func void trVulkanEndFrame(void)
     TR_VK_CHECK(vkResetCommandBuffer(trVulkan.CommandBuffer, 0));
     TR_VK_CHECK(vkBeginCommandBuffer(trVulkan.CommandBuffer, &BeginInfo));
 
-    VkImageMemoryBarrier PresentBarrier =
     {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .image = trVulkan.SwapchainImages[trVulkan.ImageIndex],
-        .srcAccessMask = VK_ACCESS_NONE,
-        .dstAccessMask = VK_ACCESS_NONE,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange =
+        VkImageMemoryBarrier RenderBarrier =
         {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .layerCount = 1,
-            .levelCount = 1,
-        },
-    };
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .image = trVulkan.SwapchainImages[trVulkan.ImageIndex],
+            .srcAccessMask = VK_ACCESS_NONE,
+            .dstAccessMask = VK_ACCESS_NONE,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .layerCount = 1,
+                .levelCount = 1,
+            },
+        };
 
-    vkCmdPipelineBarrier(
-        trVulkan.CommandBuffer,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_DEPENDENCY_BY_REGION_BIT,
-        0, 0, 0, 0,
-        1, &PresentBarrier
-    );
+        vkCmdPipelineBarrier(
+            trVulkan.CommandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_DEPENDENCY_BY_REGION_BIT,
+            0, 0, 0, 0,
+            1, &RenderBarrier
+        );
+    }
+
+    {
+        VkRenderingInfo RenderingInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea =
+            {
+                .offset = {.x = 0, .y = 0},
+                .extent = trVulkan.SwapchainExtent,
+            },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &(VkRenderingAttachmentInfo)
+            {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .imageView = trVulkan.SwapchainImageViews[trVulkan.ImageIndex],
+                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .clearValue =
+                {
+                    .color = {.float32 = {0.07f, 0.08f, 0.1f, 1.0f}},
+                },
+            },
+        };
+
+        vkCmdBeginRendering(trVulkan.CommandBuffer, &RenderingInfo);
+
+        VkViewport Viewport =
+        {
+            .x = 0,
+            .y = 0,
+            .width = (tr_f32)trVulkan.SwapchainExtent.width,
+            .height = (tr_f32)trVulkan.SwapchainExtent.height,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+
+        VkRect2D Scissor = RenderingInfo.renderArea;
+
+        vkCmdBindPipeline(trVulkan.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trVulkan.Pipeline);
+        vkCmdSetViewport(trVulkan.CommandBuffer, 0, 1, &Viewport);
+        vkCmdSetScissor(trVulkan.CommandBuffer, 0, 1, &Scissor);
+        vkCmdDraw(trVulkan.CommandBuffer, 3, 1, 0, 0);
+
+        vkCmdEndRendering(trVulkan.CommandBuffer);
+    }
+
+    {
+        VkImageMemoryBarrier PresentBarrier =
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .image = trVulkan.SwapchainImages[trVulkan.ImageIndex],
+            .srcAccessMask = VK_ACCESS_NONE,
+            .dstAccessMask = VK_ACCESS_NONE,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .layerCount = 1,
+                .levelCount = 1,
+            },
+        };
+
+        vkCmdPipelineBarrier(
+            trVulkan.CommandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_DEPENDENCY_BY_REGION_BIT,
+            0, 0, 0, 0,
+            1, &PresentBarrier
+        );
+    }
 
     TR_VK_CHECK(vkEndCommandBuffer(trVulkan.CommandBuffer));
 
