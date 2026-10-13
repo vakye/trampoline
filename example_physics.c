@@ -41,7 +41,7 @@ void Setup(void)
     }
 }
 
-void Frame(tr_f32 DeltaTime)
+void Frame(tr_f32 LastFrameTime)
 {
     // NOTE(vak): Do mouse picking
 
@@ -86,7 +86,7 @@ void Frame(tr_f32 DeltaTime)
     tr_f32 TimeStep = 1.0f / 60.0f;
     tr_u32 SolverIterations = 4;
 
-    AccumulatedTime += DeltaTime;
+    AccumulatedTime += LastFrameTime;
 
     while (AccumulatedTime >= TimeStep)
     {

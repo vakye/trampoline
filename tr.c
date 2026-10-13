@@ -529,7 +529,7 @@ void trEntryPoint(void)
 }
 
 void Setup(void); // NOTE(vak): Implemented by user
-void Frame(tr_f32 DeltaTime); // NOTE(vak): Implemented by user
+void Frame(tr_f32 LastFrameTime); // NOTE(vak): Implemented by user
 
 tr_func void trLinuxWaylandSetup(void);
 tr_func tr_b32 trLinuxWaylandShouldQuit(void);
@@ -562,26 +562,26 @@ void trLinuxBootstrap(tr_s32 ArgCount, char* Args[], char* Envp[])
     Setup();
 
     tr_clock FrameBegin = trGetWallClock();
-    tr_f64 DeltaTime = 1.0 / trLinux.TargetFPS;
+    tr_f64 LastFrameTime = 0.0f;
 
     while (!trLinuxWaylandShouldQuit())
     {
         trLinuxWaylandPollEvents();
         trVulkanBeginFrame();
 
-        Frame(DeltaTime);
+        Frame(LastFrameTime);
 
         trVulkanEndFrame();
         trLinuxWaylandPresent();
 
         tr_f64 DesiredFrameTime = 1.0 / trLinux.TargetFPS;
 
-        DeltaTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
+        LastFrameTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
 
-        while (DeltaTime < DesiredFrameTime)
+        while (LastFrameTime < DesiredFrameTime)
         {
-            trWait(DesiredFrameTime - DeltaTime);
-            DeltaTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
+            trWait(DesiredFrameTime - LastFrameTime);
+            LastFrameTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
         }
 
         FrameBegin = trGetWallClock();

@@ -10,7 +10,7 @@ void Setup(void)
 {
 }
 
-void Frame(tr_f32 DeltaTime)
+void Frame(tr_f32 LastFrameTime)
 {
     static tr_b32 Picking = TR_FALSE;
     static tr_f32 PickedRelativeX = 0.0f;
