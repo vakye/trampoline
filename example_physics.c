@@ -7,16 +7,12 @@ typedef struct
 {
     // NOTE(vak): General
 
-    tr_f32 X, Y;        // NOTE(vak): Position
-    tr_f32 DX, DY;      // NOTE(vak): Velocity
-    tr_f32 DDX, DDY;    // NOTE(vak): Acceleration
-    tr_f32 InvMass;     // NOTE(vak): 1.0 / Mass
-    tr_f32 Radius;      // NOTE(vak): Circle radius
-
-    // NOTE(vak): Constraint solver
-
-    tr_f32 DeltaX;      // NOTE(vak): X correction to be applied to position
-    tr_f32 DeltaY;      // NOTE(vak): Y correction to be applied to position
+    tr_f32 X, Y;            // NOTE(vak): Position
+    tr_f32 LastX, LastY;    // NOTE(vak): Last position
+    tr_f32 DX, DY;          // NOTE(vak): Velocity
+    tr_f32 DDX, DDY;        // NOTE(vak): Acceleration
+    tr_f32 InvMass;         // NOTE(vak): 1.0 / Mass
+    tr_f32 Radius;          // NOTE(vak): Circle radius
 } body;
 
 static body Bodies[BODY_COUNT] = {0};
@@ -38,6 +34,8 @@ void Setup(void)
         Body->Radius = trRandomF32(&Entropy, 25.0f, 50.0f);
         Body->X = trRandomF32(&Entropy, Body->Radius, WindowW - Body->Radius);
         Body->Y = trRandomF32(&Entropy, Body->Radius, WindowH - Body->Radius);
+        Body->LastX = Body->X;
+        Body->LastY = Body->Y;
 
         Body->InvMass = 1.0f / Body->Radius;
     }
@@ -96,7 +94,7 @@ void Frame(tr_f32 DeltaTime)
 
         if (PickingBody)
         {
-            tr_f32 Friction = 20.0f;
+            tr_f32 Friction = 35.0f;
             tr_f32 Force = Friction * 16.0f;
 
             tr_f32 DeltaX = MouseX - PickingBody->X;
@@ -112,42 +110,19 @@ void Frame(tr_f32 DeltaTime)
         {
             body* Body = Bodies + Index;
 
-            Body->DDY += 500.0; // NOTE(vak): Gravity
+            Body->DDY += 1000.0; // NOTE(vak): Gravity
 
-            Body->DX += Body->DDX * TimeStep;
-            Body->DY += Body->DDY * TimeStep;
+            Body->LastX = Body->X;
+            Body->LastY = Body->Y;
 
-            Body->X += Body->DX * TimeStep;
-            Body->Y += Body->DY * TimeStep;
-
-            // NOTE(vak): Reset force
-
-            Body->DDX = 0.0f;
-            Body->DDY = 0.0f;
+            Body->X += TimeStep * (Body->DX + Body->DDX * 0.5f * TimeStep);
+            Body->Y += TimeStep * (Body->DY + Body->DDY * 0.5f * TimeStep);
         }
 
-        // NOTE(vak): Solve constraints (collisions, ...) using the Jacobi
-        // method:
-        //      + Accumulate position corrections for each constraint
-        //      + Apply correction to position and adjust velocity
-        //
-        // Note that this is different from Gauss-Seidel as position corrections
-        // are accumulated and applied only at the end. Gauss-Seidel applies the
-        // position corrections immediately and uses the new positions to further
-        // apply corrections for other constraints.
+        // NOTE(vak): Gauss-Seidel constraint solver
 
         for (tr_u32 Iteration = 0; Iteration < SolverIterations; Iteration++)
         {
-            // NOTE(vak): Reset corrections
-
-            for (tr_usize Index = 0; Index < BODY_COUNT; Index++)
-            {
-                body* Body = Bodies + Index;
-
-                Body->DeltaX = 0.0f;
-                Body->DeltaY = 0.0f;
-            }
-
             // NOTE(vak): Solve boundary constraints
 
             tr_f32 WindowW = trGetWindowWidth();
@@ -162,10 +137,10 @@ void Frame(tr_f32 DeltaTime)
                 tr_f32 MaxX = Body->X + Body->Radius;
                 tr_f32 MaxY = Body->Y + Body->Radius;
 
-                if (MinX < 0.0)     Body->DeltaX += (0.0 - MinX);
-                if (MinY < 0.0)     Body->DeltaY += (0.0 - MinY);
-                if (MaxX > WindowW) Body->DeltaX += (WindowW - MaxX);
-                if (MaxY > WindowH) Body->DeltaY += (WindowH - MaxY);
+                if (MinX < 0.0)     Body->X += (0.0 - MinX);
+                if (MinY < 0.0)     Body->Y += (0.0 - MinY);
+                if (MaxX > WindowW) Body->X += (WindowW - MaxX);
+                if (MaxY > WindowH) Body->Y += (WindowH - MaxY);
             }
 
             // NOTE(vak): Solve collision constraints
@@ -197,26 +172,26 @@ void Frame(tr_f32 DeltaTime)
                     tr_f32 WA = BodyA->InvMass / TotalW;
                     tr_f32 WB = BodyB->InvMass / TotalW;
 
-                    BodyA->DeltaX -= DirectionX * Penetration * WA;
-                    BodyA->DeltaY -= DirectionY * Penetration * WA;
+                    BodyA->X -= DirectionX * Penetration * WA;
+                    BodyA->Y -= DirectionY * Penetration * WA;
 
-                    BodyB->DeltaX += DirectionX * Penetration * WB;
-                    BodyB->DeltaY += DirectionY * Penetration * WB;
+                    BodyB->X += DirectionX * Penetration * WB;
+                    BodyB->Y += DirectionY * Penetration * WB;
                 }
             }
+        }
 
-            // NOTE(vak): Apply corrections
+        // NOTE(vak): Update velocities and reset forces
 
-            for (tr_usize Index = 0; Index < BODY_COUNT; Index++)
-            {
-                body* Body = Bodies + Index;
+        for (tr_usize Index = 0; Index < BODY_COUNT; Index++)
+        {
+            body* Body = Bodies + Index;
 
-                Body->X += Body->DeltaX;
-                Body->Y += Body->DeltaY;
+            Body->DX = (Body->X - Body->LastX) / TimeStep;
+            Body->DY = (Body->Y - Body->LastY) / TimeStep;
 
-                Body->DX += Body->DeltaX / TimeStep;
-                Body->DY += Body->DeltaY / TimeStep;
-            }
+            Body->DDX = 0.0f;
+            Body->DDY = 0.0f;
         }
 
         AccumulatedTime -= TimeStep;
