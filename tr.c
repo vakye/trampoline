@@ -2408,7 +2408,7 @@ tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R,
     tr_f32 FirstX = CenterX - Radius;
     tr_f32 FirstY = CenterY;
 
-    trVertex2D(CenterX, CenterY, 0.5f, 0.5f, R, G, B, A);
+    trVertex2D(CenterX, CenterY, 0.0f, 0.0f, R, G, B, A);
     trVertex2D(FirstX,  FirstY,  0.0f, 0.5f, R, G, B, A);
 
     for (tr_u32 Index = 1; Index < PointCount; Index++)
@@ -2424,12 +2424,12 @@ tr_func void trCircle2D(tr_f32 CenterX, tr_f32 CenterY, tr_f32 Radius, tr_f32 R,
         tr_f32 X = CenterX - Radius*C;
         tr_f32 Y = CenterY + Radius*S;
 
-        trVertex2D(X, Y, U, V, R, G, B, A);
-        trVertex2D(CenterX, CenterY, 0.5f, 0.5f, R, G, B, A);
-        trVertex2D(X, Y, U, V, R, G, B, A);
+        trVertex2D(X, Y, 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(CenterX, CenterY, 0.0f, 0.0f, R, G, B, A);
+        trVertex2D(X, Y, 0.0f, 0.0f, R, G, B, A);
     }
 
-    trVertex2D(FirstX, FirstY, 0.0f, 0.5f, R, G, B, A);
+    trVertex2D(FirstX, FirstY, 0.0f, 0.0f, R, G, B, A);
 }
 
 tr_func void trRectOutline2D(tr_f32 MinX, tr_f32 MinY, tr_f32 SizeX, tr_f32 SizeY, tr_f32 Thickness, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
