@@ -204,16 +204,24 @@ tr_func tr_f64 trFloorF64(tr_f64 Value);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Trigonometry
-// Please note that these functions take in
-// normalized arguments:
-//      X=0   -> 0   radians
-//      X=0.5 -> pi  radians
-//      X=1   -> 2pi radians
 /////////////////////////////////////////////////
 
-tr_func tr_f32 trSinF32(tr_f32 X);
-tr_func tr_f32 trCosF32(tr_f32 X);
-tr_func tr_f32 trTanF32(tr_f32 X);
+typedef tr_f32 tr_turns32;
+typedef tr_f32 tr_radians32;
+typedef tr_f32 tr_degrees32;
+
+#define TR_RADIANS_TO_TURNS(Radians) ((Radians) * 0.15915494309189533577f)
+#define TR_DEGREES_TO_TURNS(Degrees) ((Radians) * 0.00277777777777777778f)
+
+#define TR_TURNS_TO_RADIANS(Turns) ((Turns) * 6.28318530717958647693f)
+#define TR_TURNS_TO_DEGREES(Turns) ((Turns) * 360.0f)
+
+#define TR_RADIANS_TO_DEGREES(Radians) ((Radians) * 0.01745329251994329577f)
+#define TR_DEGREES_TO_RADIANS(Degrees) ((Degrees) * 57.2957795130823208768f)
+
+tr_func tr_f32 trSinF32(tr_turns32 X);
+tr_func tr_f32 trCosF32(tr_turns32 X);
+tr_func tr_f32 trTanF32(tr_turns32 X);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Power & Exponential
