@@ -221,6 +221,20 @@ void Frame(tr_f32 LastFrameTime)
             1.0f, 1.0f, 1.0f, 1.0f
         );
     }
+
+    // NOTE(vak): Display controls
+    {
+        tr_str Text = trStr("Drag To Move The Bodies");
+
+        tr_f32 X = 0.5f * (trGetWindowWidth() - trMeasureTextWidth(Text));
+        tr_f32 Y = 0.0f;
+
+        trText2D(
+            Text,
+            X, Y,
+            0.98f, 0.97f, 0.89f, 1.0f
+        );
+    }
 }
 
 #include "tr.c"

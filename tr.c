@@ -540,6 +540,7 @@ tr_func tr_u32 trLinuxWaylandGetWindowHeight(void);
 tr_func tr_f32 trLinuxWaylandGetMouseX(void);
 tr_func tr_f32 trLinuxWaylandGetMouseY(void);
 tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button);
+tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button);
 
 tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
@@ -642,6 +643,24 @@ tr_func tr_b32 trIsButtonDown(tr_button Button)
 tr_func tr_b32 trIsButtonUp(tr_button Button)
 {
     tr_b32 Result = !trIsButtonDown(Button);
+    return (Result);
+}
+
+tr_func tr_b32 trIsButtonPressed(tr_button Button)
+{
+    tr_b32 Result =
+        (TR_TRUE  == trLinuxWaylandIsButtonDown(Button)) &&
+        (TR_FALSE == trLinuxWaylandWasButtonDown(Button));
+
+    return (Result);
+}
+
+tr_func tr_b32 trIsButtonReleased(tr_button Button)
+{
+    tr_b32 Result =
+        (TR_FALSE == trLinuxWaylandIsButtonDown(Button)) &&
+        (TR_TRUE  == trLinuxWaylandWasButtonDown(Button));
+
     return (Result);
 }
 
@@ -1010,6 +1029,7 @@ typedef struct
     tr_b32 Quit;
 
     tr_b32 IsDown[TR_BUTTON_MAX];
+    tr_b32 WasDown[TR_BUTTON_MAX];
 } tr_wayland_state;
 
 static tr_wayland_state trWayland = {0};
@@ -1364,6 +1384,11 @@ tr_func tr_b32 trLinuxWaylandShouldQuit(void)
 
 tr_func void trLinuxWaylandPollEvents(void)
 {
+    for (tr_button Button = 1; Button < TR_BUTTON_MAX; Button++)
+    {
+        trWayland.WasDown[Button] = trWayland.IsDown[Button];
+    }
+
     wl_display_roundtrip(trWayland.Display);
 }
 
@@ -1402,6 +1427,14 @@ tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button)
         return (TR_FALSE);
 
     return trWayland.IsDown[Button];
+}
+
+tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button)
+{
+    if ((Button == TR_BUTTON_NIL) || (Button >= TR_BUTTON_MAX))
+        return (TR_FALSE);
+
+    return trWayland.WasDown[Button];
 }
 
 #else

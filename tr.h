@@ -257,6 +257,8 @@ tr_func tr_f32 trGetMouseY(void);
 
 tr_func tr_b32 trIsButtonDown(tr_button Button);
 tr_func tr_b32 trIsButtonUp(tr_button Button);
+tr_func tr_b32 trIsButtonPressed(tr_button Button);
+tr_func tr_b32 trIsButtonReleased(tr_button Button);
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
