@@ -19,11 +19,11 @@ layout(push_constant) uniform PushConstants
     mat4 Projection;
 };
 
-layout(location = 0) out VertexShaderOutput
+layout(location = 0) out flat uint OutTextureIndex;
+layout(location = 1) out VertexShaderVarying
 {
     vec2 TexCoord;
     vec4 Color;
-    float TextureIndex;
 } Out;
 
 void main()
@@ -33,11 +33,11 @@ void main()
     vec2 Position = vec2(V.X, V.Y);    
     vec2 TexCoord = vec2(V.U, V.V);    
     vec4 Color = vec4(V.R, V.G, V.B, V.A);
-    float TextureIndex = float(V.TextureIndex);
+    uint TextureIndex = V.TextureIndex;
 
     gl_Position = Projection * vec4(Position, 0.0, 1.0);
     Out.TexCoord = TexCoord;
     Out.Color = Color;
-    Out.TextureIndex = TextureIndex;
+    OutTextureIndex = TextureIndex;
 }
 
