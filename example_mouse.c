@@ -1,13 +1,20 @@
 
 #include "tr.h"
 
-static tr_f32 X = 100.0f;
-static tr_f32 Y = 100.0f;
-static tr_f32 SizeX = 100.0f;
-static tr_f32 SizeY = 100.0f;
+static tr_str Text = {0};
+static tr_f32 X = 0.0f;
+static tr_f32 Y = 0.0f;
+static tr_f32 SizeX = 0.0f;
+static tr_f32 SizeY = 0.0f;
 
 void Setup(void)
 {
+    Text = trStr("Drag Me");
+
+    X = 100.0f;
+    Y = 100.0f;
+    SizeX = 1.5f * trMeasureTextWidth(Text);
+    SizeY = 1.5f * trMeasureTextHeight(Text);
 }
 
 void Frame(tr_f32 LastFrameTime)
@@ -58,17 +65,29 @@ void Frame(tr_f32 LastFrameTime)
     X = TR_MIN(X, WindowW - SizeX);
     Y = TR_MIN(Y, WindowH - SizeY);
 
-    tr_f32 Glow = 1.0f + 0.2f*Hovering + 0.2f*Picking;
+    tr_f32 Glow = 0.8f + 0.1f*Hovering + 0.1f*Picking;
 
     trRectOutline2D(
         X, Y, SizeX, SizeY,
         10.0f,
-        0.3f, 0.6f, 0.9f, 0.5f*Hovering + 0.3f*Picking
+        0.82f, 0.83f, 0.87f, 0.5f*Hovering + 0.3f*Picking
     );
 
     trRect2D(
         X, Y, SizeX, SizeY,
-        0.8f*Glow, 0.7f*Glow, 0.5f*Glow, 1.0f
+        0.78f*Glow, 0.73f*Glow, 0.83f*Glow, 1.0f
+    );
+
+    tr_f32 TextSizeX = trMeasureTextWidth(Text);
+    tr_f32 TextSizeY = trMeasureTextHeight(Text);
+
+    tr_f32 PadX = 0.5f*(SizeX - TextSizeX);
+    tr_f32 PadY = 0.5f*(SizeY - TextSizeY);
+
+    trText2D(
+        Text,
+        X + PadX, Y + PadY,
+        0.95f, 0.92f, 0.87f, 1.0f
     );
 }
 
