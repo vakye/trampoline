@@ -338,11 +338,9 @@ tr_func void trTexturedRect2D(
     tr_texture Texture
 );
 
-// NOTE(vak): Uses a monospace 6x8 font but scaled up 2x
-// so each glyph is 12x16 on the screen. Good for simple
-// UIs and debugging. I'm planning on bringing in a TTF
-// parser and rasterizer but that will probably make the
-// line count explode so it is a work in progress...
+// NOTE(vak): These text functions currently uses
+// Proggy Clean at 32px, which is pretty good for
+// debugging and basic UIs.
 
 tr_func tr_f32 trMeasureTextWidth(tr_str Text);
 tr_func tr_f32 trMeasureTextHeight(tr_str Text);

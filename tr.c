@@ -1549,7 +1549,7 @@ typedef struct
     VkPipeline Pipeline;
 
     tr_texture DefaultTexture;
-    tr_texture Font6x8Texture;
+    tr_texture FontTexture;
 
     VkExtent2D SwapchainExtent;
     VkSwapchainKHR Swapchain;
@@ -2561,10 +2561,20 @@ tr_func void trVulkanSetup(void)
         }
     }
 
-    // NOTE(vak): Proggy Clean 32px font texture
+    // NOTE(vak): Proggy Clean 32px font texture (ProggyClean.ttf)
     {
+        // NOTE(vak):
+        // 241 x 199 Font Atlas
+        // Each cell is 15x33
+        // Stray one pixel padding at the left and top edge of the atlas
+
         tr_u32 Width = 241;
         tr_u32 Height = 199;
+
+        // Source: https://github.com/bluescan/proggyfonts
+        // Font atlas generator used: https://bernhardfritz.github.io/monospace-font-atlas-generator/
+        // The original .png was converted to raw pixels using ffmpeg, and
+        // then packked into bits by some python magic
 
         static tr_u64 PackedBitmap[750] =
         {
@@ -2787,8 +2797,8 @@ tr_func void trVulkanSetup(void)
                 (A << 24);
         }
 
-        trVulkan.Font6x8Texture = trMakeTexture(Width, Height);
-        trUploadTexture(trVulkan.Font6x8Texture, UnpackedRGBA);
+        trVulkan.FontTexture = trMakeTexture(Width, Height);
+        trUploadTexture(trVulkan.FontTexture, UnpackedRGBA);
 
         trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
     }
@@ -3320,9 +3330,11 @@ tr_func void trTexturedRect2D(
     trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
 }
 
-// NOTE(vak): All text related functions currently assume
-// 6x8 monospace bitmap font where each cell is 8x16. We
-// scale it up 2x so each glyph rect is 16x32 on the screen.
+// NOTE(vak): All text related functions currently uses a
+// 241x199 font atlas with one pixel padding at the start
+// of the texture, and each glyph cell is 15x33.
+//
+// The font used is Proggy Clean at 32px.
 
 tr_func tr_f32 trMeasureTextWidth(tr_str Text)
 {
@@ -3430,7 +3442,7 @@ tr_func void trText2D(
                 CurrentX, CurrentY, GlyphWidth, GlyphHeight,
                 R, G, B, A,
                 MinU, MinV, MaxU, MaxV,
-                trVulkan.Font6x8Texture
+                trVulkan.FontTexture
             );
 
             CurrentX += GlyphWidth;
