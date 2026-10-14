@@ -129,7 +129,7 @@ tr_func void* trPushArenaZero(tr_arena* Arena, tr_usize Size)
 
 tr_func void trRandomSeed(tr_random* Entropy)
 {
-    Entropy->State = trGetWallClock();
+    Entropy->State = 11400714819323198485ull * trGetWallClock();
 }
 
 tr_func tr_u32 trRandomU32(tr_random* Entropy)
@@ -144,7 +144,7 @@ tr_func tr_u32 trRandomU32(tr_random* Entropy)
     X ^= X >> 18;
 
     tr_u32 V = (tr_u32)(X >> 27);
-    tr_u32 Result = (V >> Count) | (V << (-Count & 31));
+    tr_u32 Result = (V << Count) | (V >> (-Count & 31));
 
     return (Result);
 }
@@ -1548,6 +1548,9 @@ typedef struct
     VkPipelineLayout PipelineLayout;
     VkPipeline Pipeline;
 
+    tr_texture DefaultTexture;
+    tr_texture Font6x8Texture;
+
     VkExtent2D SwapchainExtent;
     VkSwapchainKHR Swapchain;
     tr_u32 MaxImageCount;
@@ -2520,10 +2523,12 @@ tr_func void trVulkanSetup(void)
             0xFFFFFFFF, 0xFFFFFFFF, 
         };
 
-        tr_texture Texture = trMakeTexture(2, 2);
-        trAssert(Texture == 0);
+        trVulkan.DefaultTexture = trMakeTexture(2, 2);
 
-        trUploadTexture(Texture, WhiteImage);
+        // NOTE(vak): Texture index 0 should always be the default texture
+        trAssert(trVulkan.DefaultTexture == TR_DEFAULT_TEXTURE);
+
+        trUploadTexture(trVulkan.DefaultTexture, WhiteImage);
 
         // NOTE(vak): Initialize every texture descriptor to
         // refer to the default texture
@@ -2554,6 +2559,178 @@ tr_func void trVulkanSetup(void)
                 0, 0
             );
         }
+    }
+
+    // NOTE(vak): Default 6x8 bitmap font texture
+    {
+        tr_u32 Width = 128;
+        tr_u32 Height = 256;
+
+        static tr_u64 PackedBitmap[512] =
+        {
+            // NOTE(vak): 128 x 256 bitmap font packed into bits
+            // Each bit represents a pixel's brightness
+            0x0000000000000000, 0x0000000000ff00ff, 0x0000000000000000, 0x0000000000ff00ff, 
+            0x0000000000000000, 0x0000000000ff00ff, 0x00181800007e7e00, 0x00fefc3c78ff00ff, 
+            0x003c3c0836ff8100, 0x18c6cc6670ff00ff, 0x007e3c1c7fdba500, 0x18fefc6658c33cff, 
+            0x18ffe73e7fff8100, 0xdbc60c664c9966e7, 0x3cffe77f7fff8100, 0x3cc60c661ebd42c3, 
+            0x3c7ee73e7fc3bd00, 0xe7c60c3c33bd42c3, 0x1818181c3ee79900, 0x3cc60c18339966e7, 
+            0x001818081cff8100, 0xdbe60e7e33c33cff, 0x003c3c0008ff8100, 0x18e70f1833ff00ff, 
+            0x00000000007e7e00, 0x186707181eff00ff, 0x0000000000000000, 0x0003000000ff00ff, 
+            0x0000000000000000, 0x0000000000ff00ff, 0x0000000000000000, 0x0000000000ff00ff, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x00003e0000004001, 0x0000000000000000, 0x180063fe66186003, 0x0000000000001818, 
+            0x3c0006db663c7007, 0x000000000000183c, 0x7e001cdb667e780f, 0x7f0800000000187e, 
+            0x180036db66187c1f, 0x7f1c14000c181818, 0x180063de66187f7f, 0x3e1c360306301818, 
+            0x180063d866187c1f, 0x3e3e7f037f7f1818, 0x7e7f36d8667e780f, 0x1c3e360306301818, 
+            0x3c7f1cd8003c7007, 0x1c7f147f0c187e18, 0x187f30d866186003, 0x087f000000003c18, 
+            0x7e7f63d866004001, 0x0000000000001818, 0x00003e0000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000001800000000, 0x0000000000000000, 
+            0x0c00001800660000, 0x0000000000000000, 0x0c1c003e00661800, 0x0000000000000c30, 
+            0x0c36006336663c00, 0x0000000000001818, 0x0636434336243c00, 0x400000000000300c, 
+            0x001c63037f003c00, 0x600000001866300c, 0x006e303e36001800, 0x30000000183c300c, 
+            0x003b186036001800, 0x18007f007eff300c, 0x00330c6036001800, 0x0c000000183c300c, 
+            0x003306617f000000, 0x060000181866300c, 0x0033636336001800, 0x0318001800001818, 
+            0x006e613e36001800, 0x0118001800000c30, 0x0000001800000000, 0x0000000c00000000, 
+            0x0000001800000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x7f1c7f303e3e181c, 0x3e00000000003e3e, 
+            0x6306033863631c36, 0x6306006000006363, 0x6003033c60601e63, 0x630c003018186363, 
+            0x6003033660301863, 0x30187e1818186363, 0x303f3f333c18186b, 0x1830000c00007e3e, 
+            0x1863607f600c186b, 0x1860000600006063, 0x0c63603060061863, 0x18307e0c00006063, 
+            0x0c63603060031863, 0x0018001818186063, 0x0c63633063631836, 0x180c003018183063, 
+            0x0c3e3e783e7f7e1c, 0x180600600c001e3e, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x3c7f7f1f3c3f0800, 0x3e63630f67783c63, 
+            0x6666663666661c3e, 0x6367770666301863, 0x4346466643663663, 0x636f7f0666301863, 
+            0x0316166603666363, 0x637f7f0636301863, 0x031e1e66033e637b, 0x637b6b061e30187f, 
+            0x7b16166603667f7b, 0x637363061e301863, 0x630606660366637b, 0x6363630636331863, 
+            0x630646664366633b, 0x6363634666331863, 0x6606663666666303, 0x6363636666331863, 
+            0x5c0f7f1f3c3f633e, 0x3e63637f671e3c63, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0008000000000000, 
+            0x0000000000000000, 0x001c000000000000, 0x6363637e3e3f3e3f, 0x00363c003c7f6663, 
+            0x6363637e63666366, 0x006330010c636663, 0x6363635a63666366, 0x000030030c616636, 
+            0x6363631806666366, 0x000030070c30663e, 0x6b6363181c3e633e, 0x0000300e0c183c1c, 
+            0x6b63631830366306, 0x0000301c0c0c181c, 0x6b63631860666306, 0x000030380c06183e, 
+            0x7f36631863666b06, 0x000030700c431836, 0x771c631863667b06, 0x000030600c631863, 
+            0x36083e3c3e673e0f, 0x00003c403c7f3c63, 0x0000000000003000, 0x0000000000000000, 
+            0x0000000000007000, 0xff00000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x000000000000000c, 0x0000000000000000, 
+            0x000000000000000c, 0x0000000000000000, 0x001c003800070018, 0x0000001c07601807, 
+            0x0036003000060000, 0x0000001806601806, 0x0026003000060000, 0x0000001806000006, 
+            0x6e063e3c3e1e1e00, 0x3e3b371866701c36, 0x330f633663363000, 0x63667f183660186e, 
+            0x33067f3303663e00, 0x63666b181e601866, 0x3306033303663300, 0x63666b181e601866, 
+            0x3306033303663300, 0x63666b1836601866, 0x3306633363663300, 0x63666b1866601866, 
+            0x3e0f3e6e3e3e6e00, 0x3e66633c67603c67, 0x3000000000000000, 0x0000000000660000, 
+            0x3300000000000000, 0x0000000000660000, 0x1e00000000000000, 0x00000000003c0000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000800000000, 0x00dc1c30e0000000, 
+            0x0000000c00000000, 0x0076303030000000, 0x0000000c00000000, 0x1000303030000000, 
+            0xc6cc663f3e3b6e3b, 0x3800303030fec6c6, 0xc6cc660c636e3366, 0x6c00e0001c66c66c, 
+            0xd6cc660c06663366, 0xc60030303030c638, 0xd6cc660c1c063366, 0xc60030303018c638, 
+            0xd6cc660c30063366, 0xc6003030300cc638, 0xfe78666c63063366, 0xfe00303030c6c66c, 
+            0x6c30dc383e0f3e3e, 0x00001c30e0fefcc6, 0x0000000000003006, 0x000000000000c000, 
+            0x0000000000003006, 0x0000000000006000, 0x000000000000780f, 0x0000000000003e00, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x1c00000000000000, 
+            0x001c060008300000, 0x3663061800060008, 0x00360c331c18333c, 0x1c000c3c660c631c, 
+            0x001c1800360c0066, 0x0008186600180036, 0x3c00000000000043, 0x1c1c000000000000, 
+            0x661e1e1e1e3e3303, 0x36361c1c1c3e3e3e, 0x0630303030633303, 0x6363181818636363, 
+            0x063e3e3e3e7f3303, 0x63631818187f7f7f, 0x6633333333033343, 0x7f7f181818030303, 
+            0x3c33333333033366, 0x6363181818030303, 0x303333333363333c, 0x6363181818636363, 
+            0x606e6e6e6e3e6e30, 0x63633c3c3c3e3e3e, 0x3c00000000000060, 0x0000000000000000, 
+            0x000000000000003e, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000018, 0x0000000000000000, 
+            0x060c06000800000c, 0x701f001c18636300, 0x0c1e0c631c7c0006, 0xd833663618000063, 
+            0x1833180036360000, 0x183366263c633e00, 0x000000000033007f, 0x181f3c0666636300, 
+            0x33333e3e3e333366, 0x1823180f06636363, 0x33336363637f6e06, 0x7e337e0606636363, 
+            0x3333636363336c3e, 0x187b180606636363, 0x3333636363337e06, 0x18337e0666636363, 
+            0x3333636363331b06, 0x183318063c636363, 0x3333636363331b66, 0x1833186718636363, 
+            0x6e6e3e3e3e73767f, 0x1863183f183e3e7e, 0x0000000000000000, 0x1b00000000000060, 
+            0x0000000000000000, 0x0e00000000000030, 0x0000000000000000, 0x000000000000001e, 
+            0x0000000000000000, 0x0000000000000000, 0x00006e0000000000, 0x0000000000000000, 
+            0x1c3c3b0018183018, 0x0000000303000000, 0x3636006e0c0c180c, 0x000018030300000c, 
+            0x3636633b06060c06, 0x000018434300000c, 0x1c7c670000000000, 0x0000006363000000, 
+            0x00006f3b333e1c1e, 0x1b6c18333300000c, 0x3e7e7f6633631830, 0x36361818187f7f0c, 
+            0x00007b663363183e, 0x6c1b180c0c600306, 0x0000736633631833, 0x36363c6606600303, 
+            0x0000636633631833, 0x1b6c3c733b600363, 0x0000636633631833, 0x00003c7961600363, 
+            0x000063666e3e3c6e, 0x0000187c3000003e, 0x0000000000000000, 0x0000006018000000, 
+            0x0000000000000000, 0x000000607c000000, 0x0000000000000000, 0x0000000000000000, 
+            0x006c181818bbaa88, 0x00186c6c006c6c00, 0x006c181818ee5522, 0x00186c6c006c6c00, 
+            0x006c181818bbaa88, 0x00186c6c006c6c00, 0x006c181818ee5522, 0x00186c6c006c6c00, 
+            0x006c181818bbaa88, 0x00186c6c006c6c00, 0x006c1f1818ee5522, 0x001f6c6f7f6c6f1f, 
+            0x006c181818bbaa88, 0x00186c60606c6018, 0x7f6f1f1f18ee5522, 0x1f1f7f7f6f6c6f1f, 
+            0x6c6c181818bbaa88, 0x180000006c6c6c18, 0x6c6c181818ee5522, 0x180000006c6c6c18, 
+            0x6c6c181818bbaa88, 0x180000006c6c6c18, 0x6c6c181818ee5522, 0x180000006c6c6c18, 
+            0x6c6c181818bbaa88, 0x180000006c6c6c18, 0x6c6c181818ee5522, 0x180000006c6c6c18, 
+            0x6c6c181818bbaa88, 0x180000006c6c6c18, 0x6c6c181818ee5522, 0x180000006c6c6c18, 
+            0x6c18180018001818, 0x186c006c006c006c, 0x6c18180018001818, 0x186c006c006c006c, 
+            0x6c18180018001818, 0x186c006c006c006c, 0x6c18180018001818, 0x186c006c006c006c, 
+            0x6c18180018001818, 0x186c006c006c006c, 0x6cf8180018001818, 0xffefffecffeffcec, 
+            0x6c18180018001818, 0x0000000c00000c0c, 0xecf8fffff8fffff8, 0xffefffecefffecfc, 
+            0x6c18180018180000, 0x006c006c6c006c00, 0x6c18180018180000, 0x006c006c6c006c00, 
+            0x6c18180018180000, 0x006c006c6c006c00, 0x6c18180018180000, 0x006c006c6c006c00, 
+            0x6c18180018180000, 0x006c006c6c006c00, 0x6c18180018180000, 0x006c006c6c006c00, 
+            0x6c18180018180000, 0x006c006c6c006c00, 0x6c18180018180000, 0x006c006c6c006c00, 
+            0x6c0000186c00006c, 0xfff00f00ff001818, 0x6c0000186c00006c, 0xfff00f00ff001818, 
+            0x6c0000186c00006c, 0xfff00f00ff001818, 0x6c0000186c00006c, 0xfff00f00ff001818, 
+            0x6c0000186c00006c, 0xfff00f00ff001818, 0x6c00f8f86c00ff6c, 0xfff00f00ff0018ff, 
+            0x6c0018186c00006c, 0xfff00f00ff001818, 0xfffcf8f8fcffffff, 0x00f00ffffff81fff, 
+            0x6c6c1800006c1800, 0x00f00fffff180018, 0x6c6c1800006c1800, 0x00f00fffff180018, 
+            0x6c6c1800006c1800, 0x00f00fffff180018, 0x6c6c1800006c1800, 0x00f00fffff180018, 
+            0x6c6c1800006c1800, 0x00f00fffff180018, 0x6c6c1800006c1800, 0x00f00fffff180018, 
+            0x6c6c1800006c1800, 0x00f00fffff180018, 0x6c6c1800006c1800, 0x00f00fffff180018, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x00000000007f1e00, 0x00380000781c0000, 
+            0x0000007f00633300, 0x3e0cc0000c361c7e, 0x6e6600637f633300, 0x6306600018633618, 
+            0x3b667e063603336e, 0x63067e7e3063633c, 0x18661b0c36031b3b, 0x633edbdb7c636366, 
+            0x18661b183603331b, 0x6306dbdb66367f66, 0x18661b0c3603631b, 0x6306cfdb66366366, 
+            0x183e1b063603631b, 0x63067e7e6636633c, 0x18061b633603633b, 0x630c060066363618, 
+            0x18060e7f3603336e, 0x633803003c771c7e, 0x0003000000000000, 0x0000000000000000, 
+            0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
+            0x0000180000000000, 0x0000000000000000, 0x0000180000000000, 0x0000000000000000, 
+            0x0000180000000000, 0x00000e1bf000001c, 0x0000187000000000, 0x00001b3630000036, 
+            0x000018d8300c0000, 0x00000c3630000036, 0x001818d81818187f, 0x003e06363000001c, 
+            0x6e1818180c301800, 0x003e133630000000, 0x3b00181806607e00, 0x003e1f3630000000, 
+            0x007e18180c30187f, 0x003e000037001800, 0x6e001b1818181800, 0x003e000036181800, 
+            0x3b181b18300c0000, 0x003e000036000000, 0x00181b180000007f, 0x003e00003c000000, 
+            0x00000e187e7eff00, 0x0000000038000000, 0x0000001800000000, 0x0000000000000000, 
+            0x0000001800000000, 0x0000000000000000, 0x0000001800000000, 0x0000000000000000, 
+       };
+
+        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+
+        tr_u32* UnpackedRGBA = trPushArenaArrayZero(
+            &trVulkan.Arena,
+            tr_u32,
+            Width * Height * 4
+        );
+
+        for (tr_u32 PixelIndex = 0; PixelIndex < Width*Height; PixelIndex++)
+        {
+            tr_u32 BitIndex = PixelIndex % 64;
+            tr_u32 MaskIndex = PixelIndex / 64;
+
+            tr_u32 Bit = (PackedBitmap[MaskIndex] >> BitIndex) & 1;
+
+            tr_u32 R = Bit * 255;
+            tr_u32 G = Bit * 255;
+            tr_u32 B = Bit * 255;
+            tr_u32 A = Bit * 255;
+
+            UnpackedRGBA[PixelIndex] =
+                (R <<  0) |
+                (B <<  8) |
+                (G << 16) |
+                (A << 24);
+        }
+
+        trVulkan.Font6x8Texture = trMakeTexture(Width, Height);
+        trUploadTexture(trVulkan.Font6x8Texture, UnpackedRGBA);
+
+        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
     }
 }
 
@@ -3081,6 +3258,135 @@ tr_func void trTexturedRect2D(
     trTexturedVertex2D(MaxX, MaxY, R, G, B, A, MaxU, MaxV, Texture);
     trTexturedVertex2D(MaxX, MinY, R, G, B, A, MaxU, MinV, Texture);
     trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
+}
+
+// NOTE(vak): All text related functions currently assume
+// 6x8 monospace bitmap font where each cell is 8x16. We
+// scale it up 2x so each glyph rect is 16x32 on the screen.
+
+tr_func tr_f32 trMeasureTextWidth(tr_str Text)
+{
+    tr_usize MaxRowCharCount = 0;
+    tr_usize RowCharCount = 0;
+
+    for (tr_usize Index = 0; Index < Text.Size; Index++)
+    {
+        char Character = Text.Data[Index];
+
+        if ((Character >= 32) && (Character <= 126))
+        {
+            RowCharCount++;
+        }
+        else if (Character == '\t')
+        {
+            RowCharCount += 4;
+        }
+        else if (Character == '\n')
+        {
+            MaxRowCharCount = TR_MAX(MaxRowCharCount, RowCharCount);
+            RowCharCount = 0;
+        }
+    }
+
+    MaxRowCharCount = TR_MAX(MaxRowCharCount, RowCharCount);
+
+    tr_f32 GlyphWidth = 16.0f;
+    tr_f32 Result = MaxRowCharCount * GlyphWidth;
+
+    return (Result);
+}
+
+tr_func tr_f32 trMeasureTextHeight(tr_str Text)
+{
+    tr_u32 LineCount = 1;
+
+    for (tr_usize Index = 0; Index < Text.Size; Index++)
+    {
+        char Character = Text.Data[Index];
+
+        if (Character == '\n')
+            LineCount++;
+    }
+
+    tr_f32 Result = LineCount * trGetTextLineHeight();
+
+    return (Result);
+}
+
+tr_func tr_f32 trGetTextLineHeight(void)
+{
+    tr_f32 GlyphHeight = 32.0f;
+    tr_f32 LineHeightScale = 1.0f;
+    tr_f32 Result = GlyphHeight * LineHeightScale;
+
+    return (Result);
+}
+
+tr_func void trText2D(
+    tr_str Text,
+    tr_f32 X, tr_f32 Y,
+    tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
+)
+{
+    tr_u32 AtlasWidth = 128;
+    tr_u32 AtlasHeight = 256;
+
+    tr_u32 CellWidth = 8;
+    tr_u32 CellHeight = 16;
+
+    tr_u32 CellCountX = AtlasWidth / CellWidth;
+    tr_u32 CellCountY = AtlasHeight / CellHeight;
+
+    tr_f32 GlyphWidth = 16.0f;
+    tr_f32 GlyphHeight = 32.0f;
+
+    tr_f32 LineHeight = trGetTextLineHeight();
+
+    tr_f32 CurrentX = X;
+    tr_f32 CurrentY = Y + 0.5f*(LineHeight - GlyphHeight);
+
+    for (tr_usize Index = 0; Index < Text.Size; Index++)
+    {
+        char Character = Text.Data[Index];
+
+        if ((Character > 32) && (Character <= 126))
+        {
+            tr_u32 CellX = Character % CellCountX;
+            tr_u32 CellY = Character / CellCountX;
+
+            tr_u32 TexelMinX = CellX * CellWidth;
+            tr_u32 TexelMinY = CellY * CellHeight;
+            tr_u32 TexelMaxX = TexelMinX + CellWidth;
+            tr_u32 TexelMaxY = TexelMinY + CellHeight;
+
+            tr_f32 MinU = (tr_f32)TexelMinX / (tr_f32)AtlasWidth;
+            tr_f32 MinV = (tr_f32)TexelMinY / (tr_f32)AtlasHeight;
+            tr_f32 MaxU = (tr_f32)TexelMaxX / (tr_f32)AtlasWidth;
+            tr_f32 MaxV = (tr_f32)TexelMaxY / (tr_f32)AtlasHeight;
+
+            trTexturedRect2D(
+                CurrentX, CurrentY, GlyphWidth, GlyphHeight,
+                R, G, B, A,
+                MinU, MinV, MaxU, MaxV,
+                trVulkan.Font6x8Texture
+            );
+
+            CurrentX += GlyphWidth;
+        }
+        else if (Character == ' ')
+        {
+            CurrentX += GlyphWidth;
+        }
+        else if (Character == '\t')
+        {
+            CurrentX += 4*GlyphWidth;
+        }
+        else if (Character == '\n')
+        {
+            CurrentX = X;
+            CurrentY += LineHeight;
+        }
+    }
 }
 
 tr_func void trVulkanEndFrame(void)

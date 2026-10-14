@@ -338,6 +338,22 @@ tr_func void trTexturedRect2D(
     tr_texture Texture
 );
 
+// NOTE(vak): Uses a monospace 6x8 font but scaled up 2x
+// so each glyph is 12x16 on the screen. Good for simple
+// UIs and debugging. I'm planning on bringing in a TTF
+// parser and rasterizer but that will probably make the
+// line count explode so it is a work in progress...
+
+tr_func tr_f32 trMeasureTextWidth(tr_str Text);
+tr_func tr_f32 trMeasureTextHeight(tr_str Text);
+tr_func tr_f32 trGetTextLineHeight(void);
+
+tr_func void trText2D(
+    tr_str Text,
+    tr_f32 X, tr_f32 Y,
+    tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
+);
+
 /////////////////////////////////////////////////
 // NOTE(vak): Implementation
 /////////////////////////////////////////////////
