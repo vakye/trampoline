@@ -109,8 +109,11 @@ void Frame(tr_f32 LastFrameTime)
 
     if (!Game.Started)
     {
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT))
+        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
+            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        {
             Game.Started = TR_TRUE;
+        }
     }
 
     if (Game.Started && !Game.Over)
@@ -120,8 +123,11 @@ void Frame(tr_f32 LastFrameTime)
         Game.PlayerDX += Game.PlayerDDX * TimeStep;
         Game.PlayerDY += Game.PlayerDDY * TimeStep;
 
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT))
+        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
+            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        {
             Game.PlayerDY = -500.0f;
+        }
 
         Game.PlayerX += Game.PlayerDX * TimeStep;
         Game.PlayerY += Game.PlayerDY * TimeStep;
@@ -176,8 +182,11 @@ void Frame(tr_f32 LastFrameTime)
 
     if (Game.Over)
     {
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT))
+        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
+            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        {
             GameRestart();
+        }
     }
 
     trSetClearColor(0.9f, 0.9f, 0.9f, 1.0f);
@@ -242,7 +251,7 @@ void Frame(tr_f32 LastFrameTime)
 
     if (!Game.Started)
     {
-        tr_str Text = trStr("Click To Start");
+        tr_str Text = trStr("Click (or press Space) To Start");
 
         tr_f32 X = 0.50f * (WindowW - trMeasureTextWidth(Text));
         tr_f32 Y = 0.25f * (WindowH - trMeasureTextHeight(Text));
@@ -265,7 +274,7 @@ void Frame(tr_f32 LastFrameTime)
         }
 
         {
-            tr_str Text = trStr("Click To Play Again");
+            tr_str Text = trStr("Click (or press Space) To Play Again");
 
             tr_f32 X = 0.50f * (WindowW - trMeasureTextWidth(Text));
 

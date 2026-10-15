@@ -22,7 +22,8 @@ LinkFlags=" \
     -Wl,-nostdlib \
     -Wl,--entry,trEntryPoint \
     -Wl,-lc \
-    -Wl,-lwayland-client"
+    -Wl,-lwayland-client \
+    -Wl,-lxkbcommon"
 
 for SourceFile in example*.c; do
     OutputFile=${SourceFile%.*}

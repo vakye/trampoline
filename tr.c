@@ -800,6 +800,7 @@ tr_func void trExit(tr_u8 ExitCode)
 /////////////////////////////////////////////////
 
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
 
 // NOTE(vak): Stuff copied from xdg-shell-client-protocol.h
 // and xdg_private.h
@@ -1021,6 +1022,11 @@ typedef struct
 
     struct wl_seat* Seat;
     struct wl_pointer* Pointer;
+    struct wl_keyboard* Keyboard;
+
+    struct xkb_context* XkbContext;
+    struct xkb_keymap* XkbKeymap;
+    struct xkb_state* XkbState;
 
     tr_f32 MouseX, MouseY;
 
@@ -1265,17 +1271,142 @@ tr_func void trLinuxWaylandPointerWarp(
     trWayland.MouseY = (tr_f32)wl_fixed_to_double(SurfaceY);
 }
 
+tr_func void trLinuxWaylandKeyboardKeymap(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_u32 Format,
+    tr_s32 FileDescriptor,
+    tr_u32 Size
+)
+{
+    if (trWayland.XkbState) xkb_state_unref(trWayland.XkbState);
+    if (trWayland.XkbKeymap) xkb_keymap_unref(trWayland.XkbKeymap);
+    if (trWayland.XkbContext) xkb_context_unref(trWayland.XkbContext);
+
+    if (Format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+        return;
+
+    tr_ssize Mapping = (tr_ssize)trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_MMAP,
+        0,
+        Size,
+        0x3,    // NOTE(vak): PROT_READ | PROT_WRITE
+        0x02,   // NOTE(vak): MAP_PRIVATE
+        FileDescriptor,
+        0
+    );
+
+    if (Mapping < 0)
+        return;
+
+    void* KeymapString = (void*)Mapping;
+
+    trWayland.XkbContext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
+    if (!trWayland.XkbContext)
+        return;
+
+    trWayland.XkbKeymap = xkb_keymap_new_from_string(
+        trWayland.XkbContext,
+        KeymapString,
+        XKB_KEYMAP_FORMAT_TEXT_V1,
+        XKB_KEYMAP_COMPILE_NO_FLAGS
+    );
+
+    if (!trWayland.XkbKeymap)
+        return;
+
+    trWayland.XkbState = xkb_state_new(trWayland.XkbKeymap);
+}
+
+tr_func void trLinuxWaylandKeyboardEnter(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_u32 Serial,
+    struct wl_surface* Surface,
+    struct wl_array* Keys
+)
+{
+}
+
+tr_func void trLinuxWaylandKeyboardLeave(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_u32 Serial,
+    struct wl_surface* Surface
+)
+{
+}
+
+tr_func void trLinuxWaylandKeyboardKey(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_u32 Serial,
+    tr_u32 Time,
+    tr_u32 EvdevScancode,
+    tr_u32 State
+)
+{
+    if (!trWayland.XkbState)
+        return;
+
+    tr_b32 IsDown = (State == WL_KEYBOARD_KEY_STATE_PRESSED);
+
+    tr_u32 XkbScancode = 8 + EvdevScancode;
+
+    xkb_keysym_t KeySym = xkb_state_key_get_one_sym(
+        trWayland.XkbState,
+        XkbScancode
+    );
+
+    tr_button Button = TR_BUTTON_NIL;
+
+    switch (KeySym)
+    {
+        default: break;
+
+        case XKB_KEY_space: Button = TR_BUTTON_KEY_SPACE; break;
+    }
+
+    if (Button != TR_BUTTON_NIL)
+        trWayland.IsDown[Button] = IsDown;
+}
+
+tr_func void trLinuxWaylandKeyboardModifiers(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_u32 Serial,
+    tr_u32 ModifiersDepressed,
+    tr_u32 ModifiersLatched,
+    tr_u32 ModifiersLocked,
+    tr_u32 Group
+)
+{
+}
+
+tr_func void trLinuxWaylandKeyboardRepeatInfo(
+    void* Data,
+    struct wl_keyboard* Keyboard,
+    tr_s32 Rate,
+    tr_s32 Delay
+)
+{
+}
+
 tr_func void trLinuxWaylandSeatCapabilities(
     void* Data,
     struct wl_seat* Seat,
     tr_u32 Capabilities
 )
 {
-    if (trWayland.Pointer)
-        wl_pointer_release(trWayland.Pointer);
+    if (trWayland.Pointer) wl_pointer_release(trWayland.Pointer);
+    if (trWayland.Keyboard) wl_keyboard_release(trWayland.Keyboard);
 
     if (Capabilities & WL_SEAT_CAPABILITY_POINTER)
         trWayland.Pointer = wl_seat_get_pointer(Seat);
+
+    if (Capabilities & WL_SEAT_CAPABILITY_KEYBOARD)
+        trWayland.Keyboard = wl_seat_get_keyboard(Seat);
 
     if (trWayland.Pointer)
     {
@@ -1296,6 +1427,21 @@ tr_func void trLinuxWaylandSeatCapabilities(
         };
 
         wl_pointer_add_listener(trWayland.Pointer, &PointerListener, 0);
+    }
+
+    if (trWayland.Keyboard)
+    {
+        static struct wl_keyboard_listener KeyboardListener =
+        {
+            .keymap = trLinuxWaylandKeyboardKeymap,
+            .enter = trLinuxWaylandKeyboardEnter,
+            .leave = trLinuxWaylandKeyboardLeave,
+            .key = trLinuxWaylandKeyboardKey,
+            .modifiers = trLinuxWaylandKeyboardModifiers,
+            .repeat_info = trLinuxWaylandKeyboardRepeatInfo,
+        };
+
+        wl_keyboard_add_listener(trWayland.Keyboard, &KeyboardListener, 0);
     }
 }
 

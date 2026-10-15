@@ -241,6 +241,8 @@ typedef enum
     TR_BUTTON_MOUSE_RIGHT,
     TR_BUTTON_MOUSE_MIDDLE,
 
+    TR_BUTTON_KEY_SPACE,
+
     TR_BUTTON_MAX,
 } tr_button;
 
