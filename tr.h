@@ -262,6 +262,15 @@ tr_func tr_b32 trIsButtonUp(tr_button Button);
 tr_func tr_b32 trIsButtonPressed(tr_button Button);
 tr_func tr_b32 trIsButtonReleased(tr_button Button);
 
+typedef struct
+{
+    void* Data;
+    tr_usize Size;
+} tr_loaded_file;
+
+tr_func tr_loaded_file trLoadFile(tr_str FilePath);
+tr_func void trUnloadFile(tr_loaded_file LoadedFile);
+
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
 

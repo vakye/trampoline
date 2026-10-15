@@ -2,6 +2,7 @@
 #include "tr.h"
 
 static tr_random Entropy = {0};
+static tr_str FileText = {0};
 static tr_str Text = {0};
 static tr_f32 X = 0.0f;
 static tr_f32 Y = 0.0f;
@@ -11,6 +12,13 @@ static tr_f32 Alpha = 0.0f;
 
 void Setup(void)
 {
+    tr_loaded_file LoadedFile = trLoadFile(trStr("tr.c"));
+
+    if (LoadedFile.Size)
+    {
+        FileText = trStrData(LoadedFile.Data, LoadedFile.Size);
+    }
+
     trRandomSeed(&Entropy);
 
     Text = trStr("The quick brown fox jumps over the lazy dog");
@@ -77,11 +85,28 @@ void Frame(tr_f32 LastFrameTime)
     X += DX*LastFrameTime;
     Y += DY*LastFrameTime;
 
+    static tr_f32 ScrollT = 0.0f;
+
+    tr_f32 FileTextHeight = trMeasureTextHeight(FileText);
+    tr_f32 ScrollSpeed = 50.0f;
+
+    ScrollT += (ScrollSpeed / FileTextHeight) * LastFrameTime;
+    ScrollT -= trFloorF32(ScrollT);
+
+    tr_f32 ScrollY = (FileTextHeight - trGetTextLineHeight()) * trSinF32(ScrollT);
+
+    trText2D(
+        FileText,
+        0.0f, -ScrollY,
+        1.0f, 1.0f, 1.0f, 0.8f
+    );
+
     trText2D(
         Text,
         X, Y,
         1.0f, 1.0f, 1.0f, Alpha
     );
+
 }
 
 #include "tr.c"

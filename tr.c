@@ -468,9 +468,14 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X)
 #include <dlfcn.h> // NOTE(vak): For loading libvulkan.so
 
 #if TR_ARCHITECTURE_X64
+    #define TR_LINUX_SYSCALL_NR_READ            (0)
     #define TR_LINUX_SYSCALL_NR_WRITE           (1)
+    #define TR_LINUX_SYSCALL_NR_OPEN            (2)
+    #define TR_LINUX_SYSCALL_NR_CLOSE           (3)
+    #define TR_LINUX_SYSCALL_NR_FSTAT           (5)
     #define TR_LINUX_SYSCALL_NR_MMAP            (9)
     #define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
+    #define TR_LINUX_SYSCALL_NR_MUNMAP          (11)
     #define TR_LINUX_SYSCALL_NR_NANOSLEEP       (35)
     #define TR_LINUX_SYSCALL_NR_EXIT            (60)
     #define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
@@ -662,6 +667,132 @@ tr_func tr_b32 trIsButtonReleased(tr_button Button)
         (TR_TRUE  == trLinuxWaylandWasButtonDown(Button));
 
     return (Result);
+}
+
+typedef struct
+{
+    // NOTE(vak): Taken from /usr/include/asm/stat.h
+
+    tr_u64          Device;
+    tr_u64          FileSerialNumber;
+    tr_u64          LinkCount;
+
+    tr_u32          Mode;
+    tr_u32          UserID;
+    tr_u32          GroupID;
+    tr_u32          Pad0;
+
+    tr_u64          DeviceNumber;
+    tr_s64          FileSize;
+    tr_s64          BlockSize;
+    tr_s64          Blocks512;
+
+    tr_s64          AccessSeconds;
+    tr_u64          AccessNanoseconds;
+    tr_s64          ModifySeconds;
+    tr_u64          ModifyNanoseconds;
+    tr_s64          StatusSeconds;
+    tr_u64          StatusNanoseconds;
+
+    tr_s64          Unused[3];
+} tr_linux_stat;
+
+tr_func tr_loaded_file trLoadFile(tr_str FilePath)
+{
+    tr_loaded_file Result = {0};
+
+    tr_s32 FileDescriptor = -1;
+
+    static char NullTerminated[4096] = {0};
+
+    if (FilePath.Size + 1 <= sizeof(NullTerminated))
+    {
+        trCopyMemory(NullTerminated, FilePath.Data, FilePath.Size);
+
+        NullTerminated[FilePath.Size] = '\0';
+
+        FileDescriptor = trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_OPEN,
+            (tr_usize)NullTerminated,
+            0, // NOTE(vak): O_RDONLY
+            0, 0, 0, 0
+        );
+    }
+
+    if (FileDescriptor > 2)
+    {
+        tr_linux_stat Stat = {0};
+
+        tr_s32 StatResult = trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_FSTAT,
+            FileDescriptor,
+            (tr_usize)&Stat,
+            0, 0, 0, 0
+        );
+
+        if (StatResult >= 0)
+            Result.Size = Stat.FileSize;
+    }
+
+    if (Result.Size)
+    {
+        tr_ssize Mapping = trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MMAP,
+            0,
+            Result.Size,
+            0x3,    // NOTE(vak): PROT_READ | PROT_WRITE,
+            0x22,   // NOTE(vak): MAP_PRIVATE | MAP_ANON
+            -1,
+            0
+        );
+
+        Result.Data = (void*)TR_MAX(0, Mapping);
+    }
+
+    if (Result.Data)
+    {
+        tr_ssize ReadResult = trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_READ,
+            FileDescriptor,
+            (tr_usize)Result.Data,
+            Result.Size,
+            0, 0, 0
+        );
+
+        tr_usize BytesRead = TR_MAX(0, ReadResult);
+
+        if (BytesRead != Result.Size)
+        {
+            trUnloadFile(Result);
+
+            Result.Data = 0;
+            Result.Size = 0;
+        }
+    }
+
+    if (FileDescriptor > 2)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_CLOSE,
+            FileDescriptor,
+            0, 0, 0, 0, 0
+        );
+    }
+
+    return (Result);
+}
+
+tr_func void trUnloadFile(tr_loaded_file LoadedFile)
+{
+    if (LoadedFile.Data)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MUNMAP,
+            (tr_usize)LoadedFile.Data,
+            LoadedFile.Size,
+            0, 0, 0, 0
+        );
+    }
 }
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size)
@@ -1296,27 +1427,37 @@ tr_func void trLinuxWaylandKeyboardKeymap(
         0
     );
 
-    if (Mapping < 0)
-        return;
+    void* KeymapString = (void*)TR_MAX(0, Mapping);
 
-    void* KeymapString = (void*)Mapping;
+    trWayland.XkbContext = 0;
+    trWayland.XkbState = 0;
+    trWayland.XkbKeymap = 0;
 
-    trWayland.XkbContext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (KeymapString)
+        trWayland.XkbContext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
-    if (!trWayland.XkbContext)
-        return;
+    if (trWayland.XkbContext)
+    {
+        trWayland.XkbKeymap = xkb_keymap_new_from_string(
+            trWayland.XkbContext,
+            KeymapString,
+            XKB_KEYMAP_FORMAT_TEXT_V1,
+            XKB_KEYMAP_COMPILE_NO_FLAGS
+        );
+    }
 
-    trWayland.XkbKeymap = xkb_keymap_new_from_string(
-        trWayland.XkbContext,
-        KeymapString,
-        XKB_KEYMAP_FORMAT_TEXT_V1,
-        XKB_KEYMAP_COMPILE_NO_FLAGS
-    );
+    if (trWayland.XkbKeymap)
+        trWayland.XkbState = xkb_state_new(trWayland.XkbKeymap);
 
-    if (!trWayland.XkbKeymap)
-        return;
-
-    trWayland.XkbState = xkb_state_new(trWayland.XkbKeymap);
+    if (KeymapString)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MUNMAP,
+            (tr_usize)KeymapString,
+            Size,
+            0, 0, 0, 0
+        );
+    }
 }
 
 tr_func void trLinuxWaylandKeyboardEnter(
@@ -2284,7 +2425,7 @@ tr_func void trVulkanSetup(void)
     {
         trVulkanMakeBuffer(
             &trVulkan.VertexBuffer,
-            TR_MB(4),
+            TR_MB(16),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT|
@@ -2294,7 +2435,7 @@ tr_func void trVulkanSetup(void)
 
         trVulkanMakeBuffer(
             &trVulkan.TransferBuffer,
-            TR_MB(4),
+            TR_MB(16),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT|
@@ -3339,16 +3480,28 @@ tr_func void trRect2D(
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 )
 {
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
+
     tr_f32 MaxX = MinX + SizeX;
     tr_f32 MaxY = MinY + SizeY;
 
-    trVertex2D(MinX, MinY, R, G, B, A);
-    trVertex2D(MinX, MaxY, R, G, B, A);
-    trVertex2D(MaxX, MaxY, R, G, B, A);
+    tr_b32 OutsideScreen =
+        (MinX > WindowW) ||
+        (MinY > WindowH) ||
+        (MaxX < 0) ||
+        (MaxY < 0);
 
-    trVertex2D(MaxX, MaxY, R, G, B, A);
-    trVertex2D(MaxX, MinY, R, G, B, A);
-    trVertex2D(MinX, MinY, R, G, B, A);
+    if (!OutsideScreen)
+    {
+        trVertex2D(MinX, MinY, R, G, B, A);
+        trVertex2D(MinX, MaxY, R, G, B, A);
+        trVertex2D(MaxX, MaxY, R, G, B, A);
+
+        trVertex2D(MaxX, MaxY, R, G, B, A);
+        trVertex2D(MaxX, MinY, R, G, B, A);
+        trVertex2D(MinX, MinY, R, G, B, A);
+    }
 }
 
 tr_func void trCircle2D(
@@ -3357,6 +3510,23 @@ tr_func void trCircle2D(
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 )
 {
+    tr_f32 MinX = CenterX - 0.5f*Radius;
+    tr_f32 MinY = CenterY - 0.5f*Radius;
+    tr_f32 MaxX = CenterX + 0.5f*Radius;
+    tr_f32 MaxY = CenterY + 0.5f*Radius;
+
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
+
+    tr_b32 OutsideScreen =
+        (MinX > WindowW) ||
+        (MinY > WindowH) ||
+        (MaxX < 0) ||
+        (MaxY < 0);
+
+    if (OutsideScreen)
+        return;
+
     tr_u32 PointCount = 32;
 
     tr_f32 FirstX = CenterX - Radius;
@@ -3395,6 +3565,23 @@ tr_func void trRectOutline2D(
 {
     tr_f32 MaxX = MinX + SizeX;
     tr_f32 MaxY = MinY + SizeY;
+
+    tr_f32 OutlineMinX = MinX - 0.5f*Thickness;
+    tr_f32 OutlineMinY = MinY - 0.5f*Thickness;
+    tr_f32 OutlineMaxX = MaxX + 0.5f*Thickness;
+    tr_f32 OutlineMaxY = MaxY + 0.5f*Thickness;
+
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
+
+    tr_b32 OutsideScreen =
+        (OutlineMinX > WindowW) ||
+        (OutlineMinY > WindowH) ||
+        (OutlineMaxX < 0) ||
+        (OutlineMaxY < 0);
+
+    if (OutsideScreen)
+        return;
 
     tr_f32 HalfThickness = 0.5f*Thickness;
 
@@ -3446,6 +3633,23 @@ tr_func void trCircleOutline2D(
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 )
 {
+    tr_f32 MinX = CenterX - 0.5f*Radius - 0.5f*Thickness;
+    tr_f32 MinY = CenterY - 0.5f*Radius - 0.5f*Thickness;
+    tr_f32 MaxX = CenterX + 0.5f*Radius + 0.5f*Thickness;
+    tr_f32 MaxY = CenterY + 0.5f*Radius + 0.5f*Thickness;
+
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
+
+    tr_b32 OutsideScreen =
+        (MinX > WindowW) ||
+        (MinY > WindowH) ||
+        (MaxX < 0) ||
+        (MaxY < 0);
+
+    if (OutsideScreen)
+        return;
+
     tr_f32 InnerRadius = Radius - 0.5f*Thickness;
     tr_f32 OuterRadius = Radius + 0.5f*Thickness;
 
@@ -3497,16 +3701,28 @@ tr_func void trTexturedRect2D(
     tr_texture Texture
 )
 {
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
+
     tr_f32 MaxX = MinX + SizeX;
     tr_f32 MaxY = MinY + SizeY;
 
-    trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
-    trTexturedVertex2D(MinX, MaxY, R, G, B, A, MinU, MaxV, Texture);
-    trTexturedVertex2D(MaxX, MaxY, R, G, B, A, MaxU, MaxV, Texture);
+    tr_b32 OutsideScreen =
+        (MinX > WindowW) ||
+        (MinY > WindowH) ||
+        (MaxX < 0) ||
+        (MaxY < 0);
 
-    trTexturedVertex2D(MaxX, MaxY, R, G, B, A, MaxU, MaxV, Texture);
-    trTexturedVertex2D(MaxX, MinY, R, G, B, A, MaxU, MinV, Texture);
-    trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
+    if (!OutsideScreen)
+    {
+        trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
+        trTexturedVertex2D(MinX, MaxY, R, G, B, A, MinU, MaxV, Texture);
+        trTexturedVertex2D(MaxX, MaxY, R, G, B, A, MaxU, MaxV, Texture);
+
+        trTexturedVertex2D(MaxX, MaxY, R, G, B, A, MaxU, MaxV, Texture);
+        trTexturedVertex2D(MaxX, MinY, R, G, B, A, MaxU, MinV, Texture);
+        trTexturedVertex2D(MinX, MinY, R, G, B, A, MinU, MinV, Texture);
+    }
 }
 
 // NOTE(vak): All text related functions currently uses a
@@ -3595,6 +3811,9 @@ tr_func void trText2D(
 
     tr_f32 CurrentX = X;
     tr_f32 CurrentY = Y + 0.5f*(LineHeight - GlyphHeight);
+
+    tr_f32 WindowW = trGetWindowWidth();
+    tr_f32 WindowH = trGetWindowHeight();
 
     for (tr_usize Index = 0; Index < Text.Size; Index++)
     {
