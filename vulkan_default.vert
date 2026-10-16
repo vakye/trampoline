@@ -5,7 +5,7 @@ struct vertex
 {
     float X, Y;
     float U, V;
-    float R, G, B, A;
+    uint  PackedRGBA;
     uint  TextureIndex;
 };
 
@@ -32,7 +32,7 @@ void main()
 
     vec2 Position = vec2(V.X, V.Y);    
     vec2 TexCoord = vec2(V.U, V.V);    
-    vec4 Color = vec4(V.R, V.G, V.B, V.A);
+    vec4 Color = unpackUnorm4x8(V.PackedRGBA);
     uint TextureIndex = V.TextureIndex;
 
     gl_Position = Projection * vec4(Position, 0.0, 1.0);
