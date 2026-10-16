@@ -200,8 +200,8 @@ void Frame(tr_f32 LastFrameTime)
     trRect2D(
         Game.PlayerX - 0.5f*Game.PlayerW,
         Game.PlayerY - 0.5f*Game.PlayerH,        
-        Game.PlayerW,
-        Game.PlayerH,
+        Game.PlayerX + 0.5f*Game.PlayerW,
+        Game.PlayerY + 0.5f*Game.PlayerH,
         0.23f, 0.27f, 0.32f, 1.0f
     );
 
@@ -212,7 +212,7 @@ void Frame(tr_f32 LastFrameTime)
         trRect2D(
             Game.PipesX[Index] - 0.5f*Game.PipeWidth,
             0.0f,
-            Game.PipeWidth,
+            Game.PipesX[Index] + 0.5f*Game.PipeWidth,
             Game.PipesY[Index] - 0.5f*Game.PipeSpacing,
             0.43f, 0.27f, 0.37f, 1.0f
         );
@@ -222,8 +222,8 @@ void Frame(tr_f32 LastFrameTime)
         trRect2D(
             Game.PipesX[Index] - 0.5f*Game.PipeWidth,
             Game.PipesY[Index] + 0.5f*Game.PipeSpacing,
-            Game.PipeWidth,
-            100000.0f,
+            Game.PipesX[Index] + 0.5f*Game.PipeWidth,
+            1000000000.0,
             0.43f, 0.27f, 0.37f, 1.0f
         );
     }

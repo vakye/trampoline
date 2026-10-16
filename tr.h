@@ -318,7 +318,7 @@ tr_func void trTexturedVertex2D(
 
 tr_func void trRect2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 );
 
@@ -330,7 +330,7 @@ tr_func void trCircle2D(
 
 tr_func void trRectOutline2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 Thickness,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 );
@@ -344,7 +344,7 @@ tr_func void trCircleOutline2D(
 
 tr_func void trTexturedRect2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A,
     tr_f32 MinU, tr_f32 MinV,
     tr_f32 MaxU, tr_f32 MaxV,

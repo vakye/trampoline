@@ -68,13 +68,13 @@ void Frame(tr_f32 LastFrameTime)
     tr_f32 Glow = 0.8f + 0.1f*Hovering + 0.1f*Picking;
 
     trRectOutline2D(
-        X, Y, SizeX, SizeY,
+        X, Y, X+SizeX, Y+SizeY,
         10.0f,
         0.82f, 0.83f, 0.87f, 0.5f*Hovering + 0.3f*Picking
     );
 
     trRect2D(
-        X, Y, SizeX, SizeY,
+        X, Y, X+SizeX, Y+SizeY,
         0.78f*Glow, 0.73f*Glow, 0.83f*Glow, 1.0f
     );
 

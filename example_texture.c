@@ -23,7 +23,7 @@ void Frame(tr_f32 LastFrameTime)
     trSetClearColor(0.1f, 0.12f, 0.14f, 1.0f);
 
     trTexturedRect2D(
-        100, 100, 100, 100,
+        100, 100, 200, 200,
         1.0f, 1.0f, 1.0f, 1.0f,
         0.0f, 0.0f, 1.0f, 1.0f,
         CheckerTexture

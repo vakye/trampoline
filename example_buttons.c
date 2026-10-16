@@ -42,7 +42,7 @@ static tr_b32 ButtonUI(ui_id ID, tr_f32 X, tr_f32 Y, tr_f32 W, tr_f32 H, tr_f32 
     if (Hovering) Glow = 1.25f;
     if (Pressed) Glow = 1.75f;
 
-    trRect2D(X, Y, W, H, R*Glow, G*Glow, B*Glow, A);
+    trRect2D(X, Y, X+W, Y+H, R*Glow, G*Glow, B*Glow, A);
 
     return (Triggered);
 }

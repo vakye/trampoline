@@ -11,7 +11,7 @@ void Frame(tr_f32 LastFrameTime)
 
     trRect2D(
         100, 100,
-        100, 100,
+        200, 200,
         1.0f, 0.8f, 0.5f, 1.0f
     );
 }

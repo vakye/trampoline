@@ -3472,15 +3472,12 @@ tr_func void trTexturedVertex2D(
 
 tr_func void trRect2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 )
 {
     tr_f32 WindowW = trGetWindowWidth();
     tr_f32 WindowH = trGetWindowHeight();
-
-    tr_f32 MaxX = MinX + SizeX;
-    tr_f32 MaxY = MinY + SizeY;
 
     tr_b32 OutsideScreen =
         (MinX > WindowW) ||
@@ -3554,14 +3551,11 @@ tr_func void trCircle2D(
 
 tr_func void trRectOutline2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 Thickness,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 )
 {
-    tr_f32 MaxX = MinX + SizeX;
-    tr_f32 MaxY = MinY + SizeY;
-
     tr_f32 OutlineMinX = MinX - 0.5f*Thickness;
     tr_f32 OutlineMinY = MinY - 0.5f*Thickness;
     tr_f32 OutlineMaxX = MaxX + 0.5f*Thickness;
@@ -3586,8 +3580,8 @@ tr_func void trRectOutline2D(
     trRect2D(
         MinX - HalfThickness,
         MinY - HalfThickness,
-        Thickness,
-        SizeY + 2.0f*HalfThickness,
+        MinX + HalfThickness,
+        MaxY + HalfThickness,
         R, G, B, A
     );
 
@@ -3596,8 +3590,8 @@ tr_func void trRectOutline2D(
     trRect2D(
         MaxX - HalfThickness,
         MinY - HalfThickness,
-        Thickness,
-        SizeY + 2.0f*HalfThickness,
+        MaxX + HalfThickness,
+        MaxY + HalfThickness,
         R, G, B, A
     );
 
@@ -3606,8 +3600,8 @@ tr_func void trRectOutline2D(
     trRect2D(
         MinX + HalfThickness,
         MinY - HalfThickness,
-        SizeX - 2.0f*HalfThickness,
-        Thickness,
+        MaxX - HalfThickness,
+        MinY + HalfThickness,
         R, G, B, A
     );
 
@@ -3616,8 +3610,8 @@ tr_func void trRectOutline2D(
     trRect2D(
         MinX + HalfThickness,
         MaxY - HalfThickness,
-        SizeX - 2.0f*HalfThickness,
-        Thickness,
+        MaxX - HalfThickness,
+        MaxY + HalfThickness,
         R, G, B, A
     );
 }
@@ -3690,7 +3684,7 @@ tr_func void trCircleOutline2D(
 
 tr_func void trTexturedRect2D(
     tr_f32 MinX, tr_f32 MinY,
-    tr_f32 SizeX, tr_f32 SizeY,
+    tr_f32 MaxX, tr_f32 MaxY,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A,
     tr_f32 MinU, tr_f32 MinV,
     tr_f32 MaxU, tr_f32 MaxV,
@@ -3699,9 +3693,6 @@ tr_func void trTexturedRect2D(
 {
     tr_f32 WindowW = trGetWindowWidth();
     tr_f32 WindowH = trGetWindowHeight();
-
-    tr_f32 MaxX = MinX + SizeX;
-    tr_f32 MaxY = MinY + SizeY;
 
     tr_b32 OutsideScreen =
         (MinX > WindowW) ||
@@ -3833,7 +3824,10 @@ tr_func void trText2D(
             tr_f32 MaxV = (tr_f32)TexelMaxY / (tr_f32)AtlasHeight;
 
             trTexturedRect2D(
-                CurrentX, CurrentY, GlyphWidth, GlyphHeight,
+                CurrentX,
+                CurrentY,
+                CurrentX+GlyphWidth,
+                CurrentY+GlyphHeight,
                 R, G, B, A,
                 MinU, MinV, MaxU, MaxV,
                 trVulkan.FontTexture
