@@ -43,14 +43,20 @@ static void SpawnPipe(void)
         LastPipeIndex = Game.PipeIndex - 1;
 
     tr_f32 LastX = Game.PipesX[LastPipeIndex];
+    tr_f32 LastY = Game.PipesY[LastPipeIndex];
     tr_f32 WindowH = trGetWindowHeight();
 
-    Game.PipesX[Game.PipeIndex] = LastX + Game.PipeDistance;
-    Game.PipesY[Game.PipeIndex] = trRandomF32(
+    tr_f32 MinOffsetY = TR_MIN(0, TR_MAX(-Game.PipeSpacing*3.0f, Game.PipeSpacing - LastY));
+    tr_f32 MaxOffsetY = TR_MAX(0, TR_MIN(+Game.PipeSpacing*3.0f, WindowH - Game.PipeSpacing - LastY));
+
+    tr_f32 OffsetY = trRandomF32(
         &Game.Entropy,
-        1.25f * (Game.PipeSpacing * 0.5f),
-        WindowH - 1.25f * (Game.PipeSpacing * 0.5f)
+        MinOffsetY,
+        MaxOffsetY
     );
+
+    Game.PipesX[Game.PipeIndex] = LastX + Game.PipeDistance;
+    Game.PipesY[Game.PipeIndex] = LastY + OffsetY;
 
     Game.PipeIndex = (Game.PipeIndex + 1) % GAME_MAX_PIPE_COUNT;
 }
