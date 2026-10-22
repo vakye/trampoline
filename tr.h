@@ -150,6 +150,9 @@ typedef struct
     tr_usize Reserved;
 } tr_arena;
 
+tr_func tr_arena* trGetPermanentArena(void);
+tr_func tr_arena* trGetTemporaryArena(void);
+
 tr_func tr_b32 trMakeArena(tr_arena* Arena, tr_usize MinCommited, tr_usize MinReserved);
 tr_func void trResetArena(tr_arena* Arena);
 
@@ -233,6 +236,15 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 
+tr_func tr_f64 trGetTargetFPS(void);
+tr_func void trSetTargetFPS(tr_f64 FPS);
+
+tr_func tr_u32 trGetWindowWidth(void);
+tr_func tr_u32 trGetWindowHeight(void);
+
+tr_func tr_f32 trGetMouseX(void);
+tr_func tr_f32 trGetMouseY(void);
+
 typedef enum
 {
     TR_BUTTON_NIL = 0,
@@ -245,17 +257,6 @@ typedef enum
 
     TR_BUTTON_MAX,
 } tr_button;
-
-typedef tr_usize tr_clock;
-
-tr_func tr_f64 trGetTargetFPS(void);
-tr_func void trSetTargetFPS(tr_f64 FPS);
-
-tr_func tr_u32 trGetWindowWidth(void);
-tr_func tr_u32 trGetWindowHeight(void);
-
-tr_func tr_f32 trGetMouseX(void);
-tr_func tr_f32 trGetMouseY(void);
 
 tr_func tr_b32 trIsButtonDown(tr_button Button);
 tr_func tr_b32 trIsButtonUp(tr_button Button);
@@ -273,6 +274,8 @@ tr_func void trUnloadFile(tr_loaded_file LoadedFile);
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
+
+typedef tr_usize tr_clock;
 
 tr_func tr_clock trGetWallClock(void);
 tr_func tr_f64 trGetSecondsElapsed(tr_clock From, tr_clock To);

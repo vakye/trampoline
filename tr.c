@@ -58,6 +58,36 @@ tr_func tr_str trCString(const char* A)
 
 #define TR_ARENA_GRANULE_SIZE TR_KB(256)
 
+tr_func tr_arena* trGetPermanentArena(void)
+{
+    static tr_arena Arena = {0};
+
+    if (!Arena.Base)
+    {
+        tr_b32 Okay = trMakeArena(&Arena, TR_KB(256), TR_GB(64));
+        trAssert(Okay);
+    }
+
+    trAssert(Arena.Base);
+
+    return (&Arena);
+}
+
+tr_func tr_arena* trGetTemporaryArena(void)
+{
+    static tr_arena Arena = {0};
+
+    if (!Arena.Base)
+    {
+        tr_b32 Okay = trMakeArena(&Arena, TR_KB(256), TR_GB(64));
+        trAssert(Okay);
+    }
+
+    trAssert(Arena.Base);
+
+    return (&Arena);
+}
+
 tr_func tr_b32 trMakeArena(tr_arena* Arena, tr_usize MinCommited, tr_usize MinReserved)
 {
     trZeroType(Arena);
@@ -1834,8 +1864,6 @@ typedef struct
 
 typedef struct
 {
-    tr_arena Arena;
-
     tr_u32 VersionOfAPI;
     VkInstance Instance;
     VkSurfaceKHR Surface;
@@ -2041,11 +2069,6 @@ tr_func void trVulkanMakeTexture(
 
 tr_func void trVulkanSetup(void)
 {
-    // NOTE(vak): Arena
-    {
-        trMakeArena(&trVulkan.Arena, TR_KB(64), TR_GB(4));
-    }
-
     // NOTE(vak): Load non-instance functions
     {
     #if TR_PLATFORM_LINUX
@@ -2156,12 +2179,13 @@ tr_func void trVulkanSetup(void)
 
     // NOTE(vak): Physical device
     {
-        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+        tr_arena* Arena = trGetTemporaryArena();
+        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
         tr_u32 Count = 0;
         TR_VK_CHECK(vkEnumeratePhysicalDevices(trVulkan.Instance, &Count, 0));
 
-        VkPhysicalDevice* Array = trPushArenaArrayZero(&trVulkan.Arena, VkPhysicalDevice, Count);
+        VkPhysicalDevice* Array = trPushArenaArrayZero(Arena, VkPhysicalDevice, Count);
         TR_VK_CHECK(vkEnumeratePhysicalDevices(trVulkan.Instance, &Count, Array));
 
         VkPhysicalDevice Preferred = {0};
@@ -2190,17 +2214,18 @@ tr_func void trVulkanSetup(void)
         trVulkan.PhysicalDevice = (Preferred) ? (Preferred) : (Fallback);
         trAssert(trVulkan.PhysicalDevice);
 
-        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
+        trSetArenaPosition(Arena, ResetArenaTo);
     }
 
     // NOTE(vak): Queue family
     {
-        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+        tr_arena* Arena = trGetTemporaryArena();
+        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
         tr_u32 Count = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(trVulkan.PhysicalDevice, &Count, 0);
 
-        VkQueueFamilyProperties* Array = trPushArenaArrayZero(&trVulkan.Arena, VkQueueFamilyProperties, Count);
+        VkQueueFamilyProperties* Array = trPushArenaArrayZero(Arena, VkQueueFamilyProperties, Count);
         vkGetPhysicalDeviceQueueFamilyProperties(trVulkan.PhysicalDevice, &Count, Array);
 
         trVulkan.QueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -2223,7 +2248,7 @@ tr_func void trVulkanSetup(void)
 
         trAssert(trVulkan.QueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
 
-        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
+        trSetArenaPosition(Arena, ResetArenaTo);
     }
 
     // NOTE(vak): Device
@@ -2308,12 +2333,13 @@ tr_func void trVulkanSetup(void)
 
     // NOTE(vak): Swapchain format
     {
-        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+        tr_arena* Arena = trGetTemporaryArena();
+        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
         tr_u32 Count = 0;
         TR_VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(trVulkan.PhysicalDevice, trVulkan.Surface, &Count, 0));
 
-        VkSurfaceFormatKHR* Array = trPushArenaArrayZero(&trVulkan.Arena, VkSurfaceFormatKHR, Count);
+        VkSurfaceFormatKHR* Array = trPushArenaArrayZero(Arena, VkSurfaceFormatKHR, Count);
         TR_VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(trVulkan.PhysicalDevice, trVulkan.Surface, &Count, Array));
 
         trVulkan.SwapchainFormat.format = VK_FORMAT_UNDEFINED;
@@ -2336,17 +2362,18 @@ tr_func void trVulkanSetup(void)
 
         trAssert(trVulkan.SwapchainFormat.format != VK_FORMAT_UNDEFINED);
 
-        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
+        trSetArenaPosition(Arena, ResetArenaTo);
     }
 
     // NOTE(vak): Present mode
     {
-        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+        tr_arena* Arena = trGetTemporaryArena();
+        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
         tr_u32 Count = 0;
         TR_VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(trVulkan.PhysicalDevice, trVulkan.Surface, &Count, 0));
 
-        VkPresentModeKHR* Array = trPushArenaArrayZero(&trVulkan.Arena, VkPresentModeKHR, Count);
+        VkPresentModeKHR* Array = trPushArenaArrayZero(Arena, VkPresentModeKHR, Count);
         TR_VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(trVulkan.PhysicalDevice, trVulkan.Surface, &Count, Array));
 
         tr_b32 HasMailbox = TR_FALSE;
@@ -2367,7 +2394,7 @@ tr_func void trVulkanSetup(void)
         else if (HasImmediate)
             trVulkan.PresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 
-        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
+        trSetArenaPosition(Arena, ResetArenaTo);
     }
 
     // NOTE(vak): Allocate swapchain image arrays
@@ -2377,8 +2404,10 @@ tr_func void trVulkanSetup(void)
 
         trVulkan.MaxImageCount = SurfaceCaps.maxImageCount;
 
-        trVulkan.SwapchainImages = trPushArenaArrayZero(&trVulkan.Arena, VkImage, trVulkan.MaxImageCount);
-        trVulkan.SwapchainImageViews = trPushArenaArrayZero(&trVulkan.Arena, VkImageView, trVulkan.MaxImageCount);
+        tr_arena* Arena = trGetPermanentArena();
+
+        trVulkan.SwapchainImages = trPushArenaArrayZero(Arena, VkImage, trVulkan.MaxImageCount);
+        trVulkan.SwapchainImageViews = trPushArenaArrayZero(Arena, VkImageView, trVulkan.MaxImageCount);
     }
 
     // NOTE(vak): Nearest sampler
@@ -2448,8 +2477,10 @@ tr_func void trVulkanSetup(void)
     {
         trVulkan.MaxTextureCount = 512;
 
+        tr_arena* Arena = trGetPermanentArena();
+
         trVulkan.Textures = trPushArenaArrayZero(
-            &trVulkan.Arena,
+            Arena,
             tr_vulkan_texture,
             trVulkan.MaxTextureCount
         );
@@ -3080,10 +3111,11 @@ tr_func void trVulkanSetup(void)
             0x0000000000000000, 0x0000000000000000, 
        };
 
-        tr_usize ResetArenaTo = trGetArenaPosition(&trVulkan.Arena);
+        tr_arena* Arena = trGetTemporaryArena();
+        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
         tr_u32* UnpackedRGBA = trPushArenaArrayZero(
-            &trVulkan.Arena,
+            Arena,
             tr_u32,
             Width * Height * 4
         );
@@ -3110,7 +3142,7 @@ tr_func void trVulkanSetup(void)
         trVulkan.FontTexture = trMakeTexture(Width, Height);
         trUploadTexture(trVulkan.FontTexture, UnpackedRGBA);
 
-        trSetArenaPosition(&trVulkan.Arena, ResetArenaTo);
+        trSetArenaPosition(Arena, ResetArenaTo);
     }
 }
 
