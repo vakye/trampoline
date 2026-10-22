@@ -109,7 +109,7 @@ typedef tr_u64  tr_b64;
 #define TR_ALIGN_UP(Value, PowerOf2) \
         (((Value) + (PowerOf2) - 1) & ~((PowerOf2) - 1))
 
-#define trAssert(Expression) \
+#define TR_ASSERT(Expression) \
     if (!(Expression)) trInvalidCodePath
 
 /////////////////////////////////////////////////

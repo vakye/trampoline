@@ -65,10 +65,10 @@ tr_func tr_arena* trGetPermanentArena(void)
     if (!Arena.Base)
     {
         tr_b32 Okay = trMakeArena(&Arena, TR_KB(256), TR_GB(64));
-        trAssert(Okay);
+        TR_ASSERT(Okay);
     }
 
-    trAssert(Arena.Base);
+    TR_ASSERT(Arena.Base);
 
     return (&Arena);
 }
@@ -80,10 +80,10 @@ tr_func tr_arena* trGetTemporaryArena(void)
     if (!Arena.Base)
     {
         tr_b32 Okay = trMakeArena(&Arena, TR_KB(256), TR_GB(64));
-        trAssert(Okay);
+        TR_ASSERT(Okay);
     }
 
-    trAssert(Arena.Base);
+    TR_ASSERT(Arena.Base);
 
     return (&Arena);
 }
@@ -1627,10 +1627,10 @@ tr_func void trLinuxWaylandSeatName(
 tr_func void trLinuxWaylandSetup(void)
 {
     trWayland.Display = wl_display_connect(0);
-    trAssert(trWayland.Display);
+    TR_ASSERT(trWayland.Display);
 
     trWayland.Registry = wl_display_get_registry(trWayland.Display);
-    trAssert(trWayland.Registry);
+    TR_ASSERT(trWayland.Registry);
 
     static struct wl_registry_listener RegistryListener =
     {
@@ -1641,8 +1641,8 @@ tr_func void trLinuxWaylandSetup(void)
 
     wl_display_roundtrip(trWayland.Display);
 
-    trAssert(trWayland.Compositor);
-    trAssert(trWayland.XdgWmBase);
+    TR_ASSERT(trWayland.Compositor);
+    TR_ASSERT(trWayland.XdgWmBase);
 
     if (trWayland.Seat)
     {
@@ -1663,13 +1663,13 @@ tr_func void trLinuxWaylandSetup(void)
     xdg_wm_base_add_listener(trWayland.XdgWmBase, &XdgWmBaseListener, 0);
 
     trWayland.Surface = wl_compositor_create_surface(trWayland.Compositor);
-    trAssert(trWayland.Surface);
+    TR_ASSERT(trWayland.Surface);
 
     trWayland.XdgSurface = xdg_wm_base_get_xdg_surface(trWayland.XdgWmBase, trWayland.Surface);
-    trAssert(trWayland.XdgSurface);
+    TR_ASSERT(trWayland.XdgSurface);
 
     trWayland.XdgTopLevel = xdg_surface_get_toplevel(trWayland.XdgSurface);
-    trAssert(trWayland.XdgTopLevel);
+    TR_ASSERT(trWayland.XdgTopLevel);
 
     static struct xdg_surface_listener XdgSurfaceListener =
     {
@@ -1916,7 +1916,7 @@ static tr_vulkan_state trVulkan = {0};
 #define TR_VK_CHECK(VulkanCall) \
     { \
         VkResult __VulkanResult__ = (VulkanCall); \
-        trAssert(__VulkanResult__ == VK_SUCCESS); \
+        TR_ASSERT(__VulkanResult__ == VK_SUCCESS); \
     }
 
 tr_func tr_u32 trVulkanSelectMemoryType(
@@ -1943,7 +1943,7 @@ tr_func tr_u32 trVulkanSelectMemoryType(
         }
     }
 
-    trAssert(MemoryTypeIndex != ~0u);
+    TR_ASSERT(MemoryTypeIndex != ~0u);
 
     return (MemoryTypeIndex);
 }
@@ -2077,7 +2077,7 @@ tr_func void trVulkanSetup(void)
         if (!Library)
             Library = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
 
-        trAssert(Library);
+        TR_ASSERT(Library);
 
         vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)
             dlsym(Library, "vkGetInstanceProcAddr");
@@ -2091,9 +2091,9 @@ tr_func void trVulkanSetup(void)
         #error Unimplemented vkGetInstanceProcAddr load for platform
     #endif
 
-        trAssert(vkGetInstanceProcAddr);
-        trAssert(vkCreateInstance);
-        trAssert(vkEnumerateInstanceVersion);
+        TR_ASSERT(vkGetInstanceProcAddr);
+        TR_ASSERT(vkCreateInstance);
+        TR_ASSERT(vkEnumerateInstanceVersion);
     }
 
     // NOTE(vak): API Version
@@ -2103,7 +2103,7 @@ tr_func void trVulkanSetup(void)
         tr_u32 Version = 0;
         TR_VK_CHECK(vkEnumerateInstanceVersion(&Version));
 
-        trAssert(Version >= trVulkan.VersionOfAPI);
+        TR_ASSERT(Version >= trVulkan.VersionOfAPI);
     }
 
     // NOTE(vak): Instance
@@ -2149,7 +2149,7 @@ tr_func void trVulkanSetup(void)
     {
         #define TR_VULKAN_LOAD(Name) \
             Name = (PFN_##Name)vkGetInstanceProcAddr(trVulkan.Instance, #Name); \
-            trAssert(Name);
+            TR_ASSERT(Name);
 
         TR_VULKAN_ALL_FUNCTIONS(TR_VULKAN_LOAD);
 
@@ -2162,7 +2162,7 @@ tr_func void trVulkanSetup(void)
         PFN_vkCreateWaylandSurfaceKHR vkCreateWaylandSurfaceKHR = (PFN_vkCreateWaylandSurfaceKHR)
             vkGetInstanceProcAddr(trVulkan.Instance, "vkCreateWaylandSurfaceKHR");
 
-        trAssert(vkCreateWaylandSurfaceKHR);
+        TR_ASSERT(vkCreateWaylandSurfaceKHR);
 
         VkWaylandSurfaceCreateInfoKHR SurfaceInfo =
         {
@@ -2212,7 +2212,7 @@ tr_func void trVulkanSetup(void)
         }
 
         trVulkan.PhysicalDevice = (Preferred) ? (Preferred) : (Fallback);
-        trAssert(trVulkan.PhysicalDevice);
+        TR_ASSERT(trVulkan.PhysicalDevice);
 
         trSetArenaPosition(Arena, ResetArenaTo);
     }
@@ -2246,7 +2246,7 @@ tr_func void trVulkanSetup(void)
             }
         }
 
-        trAssert(trVulkan.QueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+        TR_ASSERT(trVulkan.QueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
 
         trSetArenaPosition(Arena, ResetArenaTo);
     }
@@ -2360,7 +2360,7 @@ tr_func void trVulkanSetup(void)
             }
         }
 
-        trAssert(trVulkan.SwapchainFormat.format != VK_FORMAT_UNDEFINED);
+        TR_ASSERT(trVulkan.SwapchainFormat.format != VK_FORMAT_UNDEFINED);
 
         trSetArenaPosition(Arena, ResetArenaTo);
     }
@@ -2867,7 +2867,7 @@ tr_func void trVulkanSetup(void)
         trVulkan.DefaultTexture = trMakeTexture(2, 2);
 
         // NOTE(vak): Texture index 0 should always be the default texture
-        trAssert(trVulkan.DefaultTexture == TR_DEFAULT_TEXTURE);
+        TR_ASSERT(trVulkan.DefaultTexture == TR_DEFAULT_TEXTURE);
 
         trUploadTexture(trVulkan.DefaultTexture, WhiteImage);
 
@@ -3148,10 +3148,10 @@ tr_func void trVulkanSetup(void)
 
 tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height)
 {
-    trAssert(Width > 0);
-    trAssert(Height > 0);
+    TR_ASSERT(Width > 0);
+    TR_ASSERT(Height > 0);
 
-    trAssert(trVulkan.TextureCount < trVulkan.MaxTextureCount);
+    TR_ASSERT(trVulkan.TextureCount < trVulkan.MaxTextureCount);
 
     tr_texture TextureIndex = trVulkan.TextureCount++;
     tr_vulkan_texture* Texture = trVulkan.Textures + TextureIndex;
@@ -3191,8 +3191,8 @@ tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height)
 
 tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
 {
-    trAssert(Texture < trVulkan.TextureCount);
-    trAssert(Pixels);
+    TR_ASSERT(Texture < trVulkan.TextureCount);
+    TR_ASSERT(Pixels);
 
     tr_vulkan_texture* Internal = trVulkan.Textures + Texture;
 
@@ -3201,7 +3201,7 @@ tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
     tr_usize RowsPerTransfer = trVulkan.TransferBuffer.Size / BytesPerRow;
     tr_usize RowsRemaining = Internal->Height;
 
-    trAssert(RowsPerTransfer > 0);
+    TR_ASSERT(RowsPerTransfer > 0);
 
     while (RowsRemaining)
     {
@@ -3467,13 +3467,13 @@ tr_func void trTexturedVertex2D(
     tr_texture Texture
 )
 {
-    trAssert(Texture < trVulkan.TextureCount);
+    TR_ASSERT(Texture < trVulkan.TextureCount);
 
     tr_vulkan_buffer* VertexBuffer = &trVulkan.VertexBuffer;
 
     tr_usize MaxVertexCount = VertexBuffer->Size / sizeof(tr_vulkan_vertex);
 
-    trAssert(trVulkan.VertexCount < MaxVertexCount);
+    TR_ASSERT(trVulkan.VertexCount < MaxVertexCount);
 
     tr_vulkan_vertex* Vertex =
         (tr_vulkan_vertex*)VertexBuffer->Mapping + trVulkan.VertexCount;
