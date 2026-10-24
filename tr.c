@@ -3210,7 +3210,7 @@ tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format 
 
     switch (TextureFormat)
     {
-        default: TR_ASSERT(!"Missing texture format to vulkan image format conversion");
+        default: TR_ASSERT(!"Missing texture format to vulkan image format conversion"); break;
 
         case TR_TEXTURE_FORMAT_RGB:         ImageFormat = VK_FORMAT_R8G8B8_UNORM; break;
         case TR_TEXTURE_FORMAT_RGBA:        ImageFormat = VK_FORMAT_R8G8B8A8_UNORM; break;
