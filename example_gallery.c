@@ -29,50 +29,13 @@ void Setup(void)
     {
         gallery_entry* Entry = Entries + Index;
 
-        // NOTE(vak): Load PNG file
+        Entry->Texture = trLoadTexture(Entry->FilePath);
 
-        tr_loaded_file File = trLoadFile(Entry->FilePath);
-        TR_ASSERT(File.Data && File.Size);
-
-        // NOTE(vak): Decode PNG into image data
-
-        tr_arena* Arena = trGetTemporaryArena();
-        tr_usize ResetArenaTo = trGetArenaPosition(Arena);
-
-        tr_decoded_png Decoded = {0};
-        tr_b32 Okay = trDecodePNG(
-            &Decoded,
-            Arena,
-            File.Data,
-            File.Size
-        );
-
-        TR_ASSERT(Okay);
-
-        // NOTE(vak): Create texture from decoded image data
-
-        tr_texture_format Format = TR_TEXTURE_FORMAT_NIL;
-
-        switch (Decoded.Channels)
+        if (Entry->Texture)
         {
-            case 3: Format = TR_TEXTURE_FORMAT_RGB; break;
-            case 4: Format = TR_TEXTURE_FORMAT_RGBA; break;
+            Entry->Width = trGetTextureWidth(Entry->Texture);
+            Entry->Height = trGetTextureHeight(Entry->Texture);
         }
-
-        TR_ASSERT(Format != TR_TEXTURE_FORMAT_NIL);
-
-        Entry->Width = Decoded.Width;
-        Entry->Height = Decoded.Height;
-        Entry->Texture = trMakeTexture(Entry->Width, Entry->Height, Format);
-
-        TR_ASSERT(Entry->Texture);
-
-        trUploadTexture(Entry->Texture, Decoded.Pixels);
-
-        // NOTE(vak): Deallocate everything
-
-        trSetArenaPosition(Arena, ResetArenaTo);
-        trUnloadFile(File);
     }
 }
 

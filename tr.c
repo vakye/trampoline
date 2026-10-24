@@ -3197,6 +3197,76 @@ tr_func void trVulkanSetup(void)
     }
 }
 
+// TODO(vak): Shouldn't actually be part of the Vulkan backend
+// so move this to somewhere that isn't sandwiched between
+// a bunch of Vulkan functions.
+tr_func tr_texture trLoadTexture(tr_str FilePath)
+{
+    tr_texture Texture = 0;
+
+    tr_arena* Arena = trGetTemporaryArena();
+    tr_usize ResetArenaTo = trGetArenaPosition(Arena);
+
+    tr_loaded_file File = trLoadFile(FilePath);
+
+    tr_u32 Width = 0;
+    tr_u32 Height = 0;
+    tr_u32 Channels = 0;
+    void* Pixels = 0;
+
+    if (File.Data && File.Size)
+    {
+        // NOTE(vak): Try to recognize file format
+
+        tr_u64 Signature = 0;
+
+        if (File.Size >= 8)
+            Signature = *(tr_u64*)File.Data;
+
+        if (Signature == 0x0A1A0A0D474E5089) // NOTE(vak): PNG
+        {
+            tr_decoded_png Decoded = {0};
+            tr_b32 DecodingOkay = trDecodePNG(
+                &Decoded,
+                Arena,
+                File.Data,
+                File.Size
+            );
+
+            if (DecodingOkay)
+            {
+                Pixels = Decoded.Pixels;
+                Channels = Decoded.Channels;
+                Width = Decoded.Width;
+                Height = Decoded.Height;
+            }
+        }
+    }
+
+    tr_texture_format Format = TR_TEXTURE_FORMAT_NIL;
+
+    switch (Channels)
+    {
+        default: break;
+
+        case 3: Format = TR_TEXTURE_FORMAT_RGB; break;
+        case 4: Format = TR_TEXTURE_FORMAT_RGBA; break;
+    }
+
+    if (Pixels && Width && Height && (Format != TR_TEXTURE_FORMAT_NIL))
+    {
+        Texture = trMakeTexture(Width, Height, Format);
+
+        if (Texture)
+            trUploadTexture(Texture, Pixels);
+    }
+
+    trUnloadFile(File);
+    trSetArenaPosition(Arena, ResetArenaTo);
+
+    return (Texture);
+}
+
 tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format TextureFormat)
 {
     TR_ASSERT(Width > 0);
@@ -3253,6 +3323,20 @@ tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format 
     );
 
     return (TextureIndex);
+}
+
+tr_func tr_u32 trGetTextureWidth(tr_texture Texture)
+{
+    TR_ASSERT(Texture < trVulkan.TextureCount);
+    tr_vulkan_texture* Internal = trVulkan.Textures + Texture;
+    return (Internal->Width);
+}
+
+tr_func tr_u32 trGetTextureHeight(tr_texture Texture)
+{
+    TR_ASSERT(Texture < trVulkan.TextureCount);
+    tr_vulkan_texture* Internal = trVulkan.Textures + Texture;
+    return (Internal->Height);
 }
 
 tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
@@ -5156,6 +5240,7 @@ tr_func tr_b32 trDecodePNG(
 
 DecodingFailed:
 
+    trZeroType(Decoded);
     trSetArenaPosition(Arena, InitialArenaPosition); // NOTE(vak): Deallocate everything
     return (TR_FALSE);
 

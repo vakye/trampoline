@@ -328,7 +328,10 @@ typedef enum
     TR_TEXTURE_FORMAT_COUNT,
 } tr_texture_format;
 
+tr_func tr_texture trLoadTexture(tr_str FilePath); // NOTE(vak): Supports "png"
 tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format Format);
+tr_func tr_u32 trGetTextureWidth(tr_texture Texture);
+tr_func tr_u32 trGetTextureHeight(tr_texture Texture);
 tr_func void trUploadTexture(tr_texture Texture, void* Pixels);
 
 tr_func void trSetClearColor(
