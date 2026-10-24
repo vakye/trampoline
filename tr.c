@@ -34,6 +34,30 @@ tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size)
 }
 
 /////////////////////////////////////////////////
+// NOTE(vak): Endianness
+/////////////////////////////////////////////////
+
+tr_func tr_u16 trBigToHostEndian16(tr_u16 Value)
+{
+    tr_u16 Result =
+        ((Value & 0xFF00) >> 8) |
+        ((Value & 0x00FF) << 8);
+
+    return (Result);
+}
+
+tr_func tr_u32 trBigToHostEndian32(tr_u32 Value)
+{
+    tr_u32 Result =
+        ((Value & 0xFF000000) >> 24) |
+        ((Value & 0x00FF0000) >>  8) |
+        ((Value & 0x0000FF00) <<  8) |
+        ((Value & 0x000000FF) << 24);
+
+    return (Result);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Strings
 /////////////////////////////////////////////////
 
@@ -121,7 +145,7 @@ tr_func tr_usize trGetArenaPosition(tr_arena* Arena)
 
 tr_func void trSetArenaPosition(tr_arena* Arena, tr_usize Position)
 {
-    Arena->Used = 0;
+    Arena->Used = Position;
 }
 
 tr_func void* trPushArena(tr_arena* Arena, tr_usize Size)
@@ -1537,6 +1561,8 @@ tr_func void trLinuxWaylandKeyboardKey(
         default: break;
 
         case XKB_KEY_space: Button = TR_BUTTON_KEY_SPACE; break;
+        case XKB_KEY_Left:  Button = TR_BUTTON_KEY_LEFT; break;
+        case XKB_KEY_Right: Button = TR_BUTTON_KEY_RIGHT; break;
     }
 
     if (Button != TR_BUTTON_NIL)
@@ -1860,6 +1886,11 @@ typedef struct
     VkDeviceMemory Memory;
     VkImageView View;
     tr_u32 Width, Height;
+
+    // NOTE(vak): Format that the user created the image with.
+    // The actual backing memory is RGBA8, so conversion is
+    // needed when uploading.
+    VkFormat Format; 
 } tr_vulkan_texture;
 
 typedef struct
@@ -2000,21 +2031,21 @@ tr_func void trVulkanMakeTexture(
     tr_vulkan_texture* Texture,
     tr_u32 Width,
     tr_u32 Height,
+    VkFormat Format,
     VkImageUsageFlags UsageFlags
 )
 {
     trZeroType(Texture);
 
-    VkFormat Format = VK_FORMAT_R8G8B8A8_UNORM;
-
     Texture->Width = Width;
     Texture->Height = Height;
+    Texture->Format = Format;
 
     VkImageCreateInfo ImageInfo =
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = Format,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .extent = {.width = Width, .height = Height, .depth = 1},
         .mipLevels = 1,
         .arrayLayers = 1,
@@ -2047,7 +2078,7 @@ tr_func void trVulkanMakeTexture(
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = Texture->Image,
-        .format = Format,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .components =
         {
@@ -2864,7 +2895,7 @@ tr_func void trVulkanSetup(void)
             0xFFFFFFFF, 0xFFFFFFFF, 
         };
 
-        trVulkan.DefaultTexture = trMakeTexture(2, 2);
+        trVulkan.DefaultTexture = trMakeTexture(2, 2, TR_TEXTURE_FORMAT_RGBA);
 
         // NOTE(vak): Texture index 0 should always be the default texture
         TR_ASSERT(trVulkan.DefaultTexture == TR_DEFAULT_TEXTURE);
@@ -3139,19 +3170,31 @@ tr_func void trVulkanSetup(void)
                 (A << 24);
         }
 
-        trVulkan.FontTexture = trMakeTexture(Width, Height);
+        trVulkan.FontTexture = trMakeTexture(Width, Height, TR_TEXTURE_FORMAT_RGBA);
         trUploadTexture(trVulkan.FontTexture, UnpackedRGBA);
 
         trSetArenaPosition(Arena, ResetArenaTo);
     }
 }
 
-tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height)
+tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format TextureFormat)
 {
     TR_ASSERT(Width > 0);
     TR_ASSERT(Height > 0);
+    TR_ASSERT(TextureFormat > 0);
+    TR_ASSERT(TextureFormat < TR_TEXTURE_FORMAT_COUNT);
 
     TR_ASSERT(trVulkan.TextureCount < trVulkan.MaxTextureCount);
+
+    VkFormat ImageFormat = VK_FORMAT_UNDEFINED;
+
+    switch (TextureFormat)
+    {
+        default: TR_ASSERT(!"Missing texture format to vulkan image format conversion");
+
+        case TR_TEXTURE_FORMAT_RGB:  ImageFormat = VK_FORMAT_R8G8B8_UNORM; break;
+        case TR_TEXTURE_FORMAT_RGBA: ImageFormat = VK_FORMAT_R8G8B8A8_UNORM; break;
+    }
 
     tr_texture TextureIndex = trVulkan.TextureCount++;
     tr_vulkan_texture* Texture = trVulkan.Textures + TextureIndex;
@@ -3160,6 +3203,7 @@ tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height)
         Texture,
         Width,
         Height,
+        ImageFormat,
         VK_IMAGE_USAGE_SAMPLED_BIT|
         VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
@@ -3196,8 +3240,10 @@ tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
 
     tr_vulkan_texture* Internal = trVulkan.Textures + Texture;
 
-    tr_usize BytesPerRGBA = 4;
-    tr_usize BytesPerRow = BytesPerRGBA * Internal->Width;
+    // NOTE(vak): The internal image storage is RGBA8, so the transfer buffer
+    // pixel data have to be in RGBA8 format. These calculations reflect that.
+
+    tr_usize BytesPerRow = 4 * Internal->Width;
     tr_usize RowsPerTransfer = trVulkan.TransferBuffer.Size / BytesPerRow;
     tr_usize RowsRemaining = Internal->Height;
 
@@ -3208,11 +3254,43 @@ tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
         tr_usize SourceRow = (Internal->Height - RowsRemaining);
         tr_usize RowsToTransfer = TR_MIN(RowsRemaining, RowsPerTransfer);
 
-        trCopyMemory(
-            trVulkan.TransferBuffer.Mapping,
-            (tr_u8*)Pixels + SourceRow * BytesPerRow,
-            RowsToTransfer * BytesPerRow
-        );
+        // NOTE(vak): Copy RGBA8 pixel data into transfer buffer before uploading
+        // it to the GPU. If the pixel data isn't in RGBA8 format then we have to
+        // convert it.
+
+        switch (Internal->Format)
+        {
+            default: TR_ASSERT(!"Missing RGBA conversion in trUploadTexture (Vulkan backend)"); break;
+
+            case VK_FORMAT_R8G8B8_UNORM:
+            {
+                tr_u8* Dest   = (tr_u8*)trVulkan.TransferBuffer.Mapping;
+                tr_u8* Source = (tr_u8*)Pixels + 3*Internal->Width*SourceRow;
+
+                for (tr_u32 Row = 0; Row < RowsToTransfer; Row++)
+                {
+                    for (tr_u32 X = 0; X < Internal->Width; X++)
+                    {
+                        Dest[X*4 + 0] = Source[X*3 + 0];
+                        Dest[X*4 + 1] = Source[X*3 + 1];
+                        Dest[X*4 + 2] = Source[X*3 + 2];
+                        Dest[X*4 + 3] = 255;
+                    }
+
+                    Dest   += 4*Internal->Width;
+                    Source += 3*Internal->Width;
+                }
+            } break;
+
+            case VK_FORMAT_R8G8B8A8_UNORM:
+            {
+                trCopyMemory(
+                    trVulkan.TransferBuffer.Mapping,
+                    (tr_u8*)Pixels + 4*Internal->Width*SourceRow,
+                    RowsToTransfer * 4*Internal->Width
+                );
+            } break;
+        }
 
         TR_VK_CHECK(vkDeviceWaitIdle(trVulkan.Device));
 
@@ -4102,6 +4180,908 @@ tr_func void trVulkanEndFrame(void)
     TR_VK_CHECK(vkQueuePresentKHR(trVulkan.Queue, &PresentInfo));
 
     TR_VK_CHECK(vkDeviceWaitIdle(trVulkan.Device));
+}
+
+/////////////////////////////////////////////////
+// NOTE(vak): Bytestream reader
+/////////////////////////////////////////////////
+
+tr_func tr_reader trMakeReader(void* Data, tr_usize Size)
+{
+    tr_reader Reader =
+    {
+        .At = (tr_u8*)Data,
+        .Remaining = Size,
+    };
+
+    return (Reader);
+}
+
+tr_func void trReaderTryNextChunk(tr_reader* Reader)
+{
+    if (Reader->Remaining == 0)
+    {
+        if (Reader->FirstChunk)
+        {
+            tr_reader_chunk* Chunk = Reader->FirstChunk;
+
+            Reader->At = Chunk->Data;
+            Reader->Remaining = Chunk->Size;
+
+            Reader->FirstChunk = Chunk->Next;
+        }
+
+        if (!Reader->FirstChunk)
+        {
+            Reader->FirstChunk = 0;
+            Reader->LastChunk = 0;
+        }
+    }
+}
+
+tr_func void* trReaderConsumeSize(tr_reader* Reader, tr_usize Size)
+{
+    trReaderTryNextChunk(Reader);
+
+    TR_ASSERT(Size <= Reader->Remaining);
+
+    void* Result = Reader->At;
+
+    Reader->At += Size;
+    Reader->Remaining -= Size;
+
+    return (Result);
+}
+
+tr_func tr_b32 trReaderConsumeToBuffer(tr_reader* Reader, tr_usize Size, void* Buffer)
+{
+    trReaderTryNextChunk(Reader);
+
+    if (Reader->Remaining < Size)
+        return (TR_FALSE);
+
+    void* ConsumedAt = trReaderConsumeSize(Reader, Size);
+    trCopyMemory(Buffer, ConsumedAt, Size);
+
+    return (TR_TRUE);
+}
+
+tr_func tr_b32 trReaderAddChunk(tr_reader* Reader, tr_arena* Arena, void* Data, tr_usize Size)
+{
+    tr_b32 ParametersOkay = (Reader && Arena && Data && Size);
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    tr_reader_chunk* Chunk = trPushArenaTypeZero(Arena, tr_reader_chunk);
+
+    if (!Chunk)
+        return (TR_FALSE);
+
+    Chunk->Data = Data;
+    Chunk->Size = Size;
+
+    if (!Reader->FirstChunk || !Reader->LastChunk)
+    {
+        Reader->FirstChunk = Chunk;
+        Reader->LastChunk = Chunk;
+    }
+    else
+    {
+        Reader->LastChunk->Next = Chunk;
+        Reader->LastChunk = Chunk;
+    }
+
+    return (TR_TRUE);
+}
+
+tr_func tr_bit_reader trMakeBitReader(tr_reader* Reader)
+{
+    TR_ASSERT(Reader);
+
+    tr_bit_reader BitReader =
+    {
+        .Reader = Reader,
+        .BitBuffer = 0,
+        .BitCount = 0,
+    };
+
+    return (BitReader);
+}
+
+tr_func tr_b32 trBitReaderConsume(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount)
+{
+    tr_b32 PeekOkay = trBitReaderPeek(BitReader, Buffer, BitCount);
+    tr_b32 AdvanceOkay = TR_FALSE;
+
+    if (PeekOkay)
+        AdvanceOkay = trBitReaderAdvance(BitReader, BitCount);
+
+    tr_b32 Okay = PeekOkay && AdvanceOkay;
+
+    return (Okay);
+}
+
+tr_func tr_b32 trBitReaderPeek(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount)
+{
+    tr_b32 ParametersOkay = (BitReader && Buffer && (BitCount <= 32));
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    tr_reader* BackingReader = BitReader->Reader;
+
+    while (BitReader->BitCount < BitCount)
+    {
+        tr_u8 Byte = 0;
+
+        if (!trReaderConsumeInto(BackingReader, &Byte)) return (TR_FALSE);
+
+        BitReader->BitBuffer |= (tr_u64)Byte << BitReader->BitCount;
+        BitReader->BitCount += 8;
+    }
+
+    tr_u64 Mask = (((tr_usize)1) << BitCount) - 1;
+
+    *Buffer = (tr_u32)(BitReader->BitBuffer & Mask);
+
+    return (TR_TRUE);
+}
+
+tr_func tr_b32 trBitReaderAdvance(tr_bit_reader* BitReader, tr_usize BitCount)
+{
+    tr_b32 ParametersOkay = (BitReader && (BitCount <= 32));
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    tr_b32 Okay = (BitCount <= BitReader->BitCount);
+    if (Okay)
+    {
+        BitReader->BitBuffer >>= BitCount;
+        BitReader->BitCount -= BitCount;
+    }
+
+    return (Okay);
+}
+
+/////////////////////////////////////////////////
+// NOTE(vak): PNG
+/////////////////////////////////////////////////
+
+typedef struct __attribute__((packed))
+{
+    tr_u32 Length;
+    tr_u32 ChunkType;
+} tr_png_chunk_header;
+
+typedef struct __attribute__((packed))
+{
+    tr_u32 CRC;
+} tr_png_chunk_footer;
+
+typedef struct __attribute__((packed))
+{
+    tr_u32 Width;
+    tr_u32 Height;
+    tr_u8  BitDepth;
+    tr_u8  ColorType;
+    tr_u8  CompressionMethod;
+    tr_u8  FilterMethod;
+    tr_u8  InterlaceMethod;
+} tr_png_ihdr;
+
+typedef struct
+{
+    tr_u16 Value;
+    tr_u16 BitCount;
+} tr_png_huffman_entry;
+
+typedef struct
+{
+    // NOTE(vak): EntryCount = (1 << BitCount)
+
+    tr_usize BitCount;
+    tr_png_huffman_entry* Entries;
+} tr_png_huffman;
+
+tr_func tr_b32 trAllocateHuffmanPNG(tr_png_huffman* Huffman, tr_arena* Arena, tr_usize BitCount)
+{
+    tr_b32 ParametersOkay = (Huffman && Arena && ((BitCount > 0) && (BitCount <= 15)));
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    Huffman->BitCount = BitCount;
+
+    tr_usize EntryCount = ((tr_usize)1) << BitCount;
+
+    Huffman->Entries = trPushArenaArrayZero(
+        Arena,
+        tr_png_huffman_entry,
+        EntryCount
+    );
+
+    if (!Huffman->Entries)
+        return (TR_FALSE);
+
+    return (TR_TRUE);
+}
+
+tr_func tr_b32 trBuildHuffmanPNG(
+    tr_png_huffman* Huffman,
+    tr_u32* SymbolCodeLengths,
+    tr_u32 SymbolCount
+)
+{
+    tr_b32 ParametersOkay = (Huffman && SymbolCodeLengths && ((SymbolCount > 0) && (SymbolCount <= 288)));
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    // NOTE(vak): Zero everything
+    {
+        tr_usize EntryCount = ((tr_usize)1) << Huffman->BitCount;
+        trZeroArray(Huffman->Entries, EntryCount);
+    }
+
+    tr_u32 NextCodes[288] = {0};
+
+    // NOTE(vak): Construct codes from code lengths
+    {
+        tr_u32 Histogram[288] = {0};
+
+        for (tr_u16 Symbol = 0; Symbol < SymbolCount; Symbol++)
+        {
+            tr_u32 CodeLength = SymbolCodeLengths[Symbol];
+            Histogram[CodeLength]++;
+        }
+
+        Histogram[0] = 0;
+
+        for (tr_u32 BitIndex = 1; BitIndex <= Huffman->BitCount; BitIndex++)
+        {
+            NextCodes[BitIndex] = (NextCodes[BitIndex-1] + Histogram[BitIndex - 1]) << 1;
+        }
+    }
+
+    // NOTE(vak): Fill in lookup table for mapping codes to symbols
+
+    for (tr_u16 Symbol = 0; Symbol < SymbolCount; Symbol++)
+    {
+        tr_u32 CodeLength = SymbolCodeLengths[Symbol];
+        if (CodeLength == 0)
+            continue;
+
+        tr_u32 BitsRemaining = (Huffman->BitCount - CodeLength);
+
+        tr_u32 EntryCount = (1 << BitsRemaining);
+        tr_u32 Code = NextCodes[CodeLength]++;
+
+        for (tr_u32 EntryIndex = 0; EntryIndex < EntryCount; EntryIndex++)
+        {
+            tr_u32 FullIndex = (Code << BitsRemaining) + EntryIndex;
+            tr_u32 BitReversedIndex = 0;
+
+            for (tr_u32 BitIndex = 0; BitIndex <= Huffman->BitCount/2; BitIndex++)
+            {
+                tr_u32 A = BitIndex;
+                tr_u32 B = Huffman->BitCount - BitIndex - 1;
+
+                BitReversedIndex |= ((FullIndex >> B) & 1) << A;
+                BitReversedIndex |= ((FullIndex >> A) & 1) << B;
+            }
+
+            tr_png_huffman_entry* Entry = Huffman->Entries + BitReversedIndex;
+
+            // NOTE(vak): Something is wrong if we're overwriting entries...
+            if (Entry->BitCount > 0)
+                return (TR_FALSE);
+
+            Entry->Value = Symbol;
+            Entry->BitCount = (tr_u16)CodeLength;
+        }
+    }
+
+    return (TR_TRUE);
+}
+
+tr_func tr_b32 trDecodeHuffmanPNG(
+    tr_png_huffman* Huffman,
+    tr_bit_reader* BitReader,
+    tr_u32* Buffer
+)
+{
+    tr_b32 ParametersOkay = (Huffman && BitReader && Buffer);
+    if (!ParametersOkay)
+        return (TR_FALSE);
+
+    tr_u32 Bits = 0;
+
+    if (!trBitReaderPeek(BitReader, &Bits, Huffman->BitCount)) return (TR_FALSE);
+
+    tr_png_huffman_entry* Entry = Huffman->Entries + Bits;
+    if (!Entry->BitCount) return (TR_FALSE);
+
+    *Buffer = (tr_u32)Entry->Value;
+
+    if (!trBitReaderAdvance(BitReader, Entry->BitCount)) return (TR_FALSE);
+
+    return (TR_TRUE);
+}
+
+tr_func tr_b32 trDecodePNG(
+    tr_decoded_png* Decoded,
+    tr_arena* Arena,
+    void* Data,
+    tr_usize DataSize
+)
+{
+    #define TR_PNG_CHECK(Value) if (!(Value)) goto DecodingFailed;
+
+    // NOTE(vak): This is the initial arena position before the
+    // decoder allocates anything. Used for deallocating everything
+    // if the decoding process fails. See the "DecodingFailed" label
+    // at the very end of this function.
+
+    tr_usize InitialArenaPosition = trGetArenaPosition(Arena);
+
+    TR_PNG_CHECK(Decoded && Arena && Data && DataSize);
+
+    trZeroType(Decoded);
+
+    tr_reader DataReader = {0}; // NOTE(vak): Linked list of IDAT chunks
+    tr_usize ResetArenaTo = InitialArenaPosition; // NOTE(vak): Position to reset arena to after the decoder is finished
+
+    // NOTE(vak): Signature and chunks
+    {
+        tr_reader Reader = trMakeReader(Data, DataSize);
+
+        tr_u64 Signature = 0;
+
+        TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Signature));
+        TR_PNG_CHECK(Signature == 0x0A1A0A0D474E5089);
+
+        tr_b32 EncounteredIHDR = TR_FALSE;
+        tr_b32 EncounteredIEND = TR_FALSE;
+        tr_u32 ChunkIndex = 0; // NOTE(vak): To check if IHDR is the first chunk
+
+        while (Reader.Remaining && !EncounteredIEND)
+        {
+            tr_png_chunk_header Header = {0};
+            tr_png_chunk_footer Footer = {0};
+
+            TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Header));
+
+            tr_u32 ChunkLength = trBigToHostEndian32(Header.Length);
+            TR_PNG_CHECK(ChunkLength <= Reader.Remaining);
+
+            void* ChunkData = trReaderConsumeSize(&Reader, ChunkLength);
+
+            TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Footer));
+
+            switch (Header.ChunkType)
+            {
+                default: break;
+
+                case 0x52444849: // NOTE(vak): IHDR
+                {
+                    TR_PNG_CHECK(ChunkIndex == 0);
+                    TR_PNG_CHECK(ChunkLength == sizeof(tr_png_ihdr));
+
+                    tr_png_ihdr* IHDR = (tr_png_ihdr*)ChunkData;
+
+                    Decoded->Width = trBigToHostEndian32(IHDR->Width);
+                    Decoded->Height = trBigToHostEndian32(IHDR->Height);
+
+                    switch (IHDR->ColorType)
+                    {
+                        default: Decoded->Channels = 0;
+
+                        case 0: Decoded->Channels = 1; break; // NOTE(vak): Greyscale
+                        case 2: Decoded->Channels = 3; break; // NOTE(vak): RGB
+                        case 4: Decoded->Channels = 2; break; // NOTE(vak): Greyscale + Alpha
+                        case 6: Decoded->Channels = 4; break; // NOTE(vak): RGBA
+                    }
+
+                    tr_b32 IsValid = TR_TRUE;
+
+                    IsValid &= (Decoded->Width != 0) && (Decoded->Height != 0);
+                    IsValid &= (IHDR->BitDepth == 8);
+                    IsValid &= (Decoded->Channels != 0);
+                    IsValid &= (IHDR->CompressionMethod == 0);
+                    IsValid &= (IHDR->FilterMethod == 0);
+                    IsValid &= (IHDR->InterlaceMethod == 0);
+
+                    TR_PNG_CHECK(IsValid);
+
+                    // NOTE(vak): Allocate memory for image, and set the arena
+                    // reset position. Every single arena allocation made after
+                    // the main image allocation is treated as temporary working
+                    // memory for the decoder, and will be resetted at the end.
+
+                    Decoded->Pixels = trPushArenaZero(
+                        Arena,
+                        Decoded->Width * Decoded->Height * Decoded->Channels
+                    );
+
+                    TR_PNG_CHECK(Decoded->Pixels);
+
+                    ResetArenaTo = trGetArenaPosition(Arena);
+
+                    EncounteredIHDR = TR_TRUE;
+                } break;
+
+                case 0x54414449: // NOTE(vak): IDAT
+                {
+                    // NOTE(vak): Uses the arena to allocate tr_reader_chunk.
+                    // The PNG spec enforces IHDR to be placed before IDAT, so
+                    // the arena allocation should be made right after the main
+                    // image allocation. Thus, it can be resetted at the end later,
+                    // so this code is fine.
+
+                    TR_PNG_CHECK(EncounteredIHDR);
+                    TR_PNG_CHECK(trReaderAddChunk(&DataReader, Arena, ChunkData, ChunkLength));
+                } break;
+
+                case 0x444e4549: // NOTE(vak): IEND
+                {
+                    TR_PNG_CHECK(EncounteredIHDR);
+                    EncounteredIEND = TR_TRUE;
+                } break;
+            }
+
+            ChunkIndex++;
+        }
+
+        TR_PNG_CHECK(EncounteredIEND);
+    }
+
+    TR_PNG_CHECK(DataReader.FirstChunk);
+
+    tr_usize DecompressedSize = (1 + Decoded->Width*Decoded->Channels) * Decoded->Height;
+
+    tr_u8* DecompressedBytes = trPushArenaZero(
+        Arena,
+        DecompressedSize
+    );
+
+    TR_PNG_CHECK(DecompressedBytes);
+
+    tr_usize DecompressedOffset = 0;
+
+    // NOTE(vak): Decompress
+    {
+        // NOTE(vak): ZLIB Compressed Data Format
+        // https://www.rfc-editor.org/info/rfc1950/
+
+        tr_u8 CMF = 0;
+        tr_u8 FLG = 0;
+
+        TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &CMF));
+        TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &FLG));
+
+        tr_u8 CM     = (CMF & 0x0F);
+        tr_u8 CINFO  = (CMF >> 4) & 0x0F;
+        tr_u8 FCHECK = (FLG & 0x1F);
+        tr_u8 FDICT  = (FLG >> 5) & 0x01;
+        tr_u8 FLEVEL = (FLG >> 6) & 0x03;
+
+        {
+            tr_u16 CheckValue = 256*((tr_u16)CMF) + (tr_u16)FLG;
+            tr_b32 IsValid = TR_TRUE;
+
+            IsValid &= ((CheckValue % 31) == 0);
+            IsValid &= (CM == 8);
+            IsValid &= (CINFO == 7);
+            IsValid &= (FDICT == 0);
+
+            TR_PNG_CHECK(IsValid);
+        }
+
+        // NOTE(vak): DEFLATE Compressed Data Format
+        // https://www.rfc-editor.org/info/rfc1951/
+
+        tr_bit_reader BitReader = trMakeBitReader(&DataReader);
+
+        tr_u32 BFINAL = 0;
+        tr_u32 BTYPE  = 0;
+
+        tr_png_huffman HuffmanCLEN      = {0};
+        tr_png_huffman HuffmanLitLen    = {0};
+        tr_png_huffman HuffmanDist      = {0};
+
+        TR_PNG_CHECK(trAllocateHuffmanPNG(&HuffmanCLEN, Arena, 7));
+        TR_PNG_CHECK(trAllocateHuffmanPNG(&HuffmanLitLen, Arena, 15));
+        TR_PNG_CHECK(trAllocateHuffmanPNG(&HuffmanDist, Arena, 15));
+
+        do
+        {
+            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BFINAL, 1));
+            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BTYPE,  2));
+
+            if (BTYPE == 0x00)
+            {
+                // TODO(vak): !!!! Actually test if this thing works or not!!!!
+                // NOTE(vak): Uncompressed
+
+                // NOTE(vak): We're reading in a bytestream, so reset bit reader
+                // since it isn't needed here.
+                BitReader.BitBuffer = 0;
+                BitReader.BitCount  = 0;
+
+                tr_u16 LEN  = 0;
+                tr_u16 NLEN = 0;
+
+                TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &LEN));
+                TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &NLEN));
+
+                TR_PNG_CHECK((tr_u16)(~LEN) == (tr_u16)(NLEN));
+
+                tr_usize Remaining = LEN;
+
+                while (Remaining)
+                {
+                    // NOTE(vak): Go to next chunk if nothing remains
+                    if (DataReader.Remaining == 0)
+                        trReaderTryNextChunk(&DataReader);
+
+                    // NOTE(vak): Last chunk now...
+                    if (!DataReader.FirstChunk)
+                        TR_PNG_CHECK(DataReader.Remaining >= Remaining);
+
+                    tr_usize ConsumeSize = TR_MIN(DataReader.Remaining, Remaining);
+
+                    void* UncompressedData = trReaderConsumeSize(&DataReader, ConsumeSize);
+
+                    TR_PNG_CHECK(DecompressedOffset + ConsumeSize <= DecompressedSize);
+
+                    trCopyMemory(
+                        DecompressedBytes + DecompressedOffset,
+                        UncompressedData,
+                        ConsumeSize
+                    );
+
+                    DecompressedOffset += ConsumeSize;
+                    Remaining -= ConsumeSize;
+                }
+            }
+            else if (BTYPE == 0x01)
+            {
+                // NOTE(vak): Compressed with static huffman codes
+                // TODO(vak): Implement this
+            }
+            else if (BTYPE == 0x02)
+            {
+                // NOTE(vak): Compressed with dynamic huffman codes
+
+                tr_u32 HLIT  = 0;
+                tr_u32 HDIST = 0;
+                tr_u32 HCLEN = 0;
+
+                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HLIT,  5));
+                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HDIST, 5));
+                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HCLEN, 4));
+
+                HLIT  += 257;
+                HDIST += 1;
+                HCLEN += 4;
+
+                // NOTE(vak): Code lengths for code lengths... (literally)
+
+                tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+                tr_u32 CodeLengthsForCLEN[19] = {0};
+
+                for (tr_u32 Index = 0; Index < HCLEN; Index++)
+                {
+                    TR_PNG_CHECK(trBitReaderConsume(
+                        &BitReader,
+                        &CodeLengthsForCLEN[Swizzle[Index]],
+                        3
+                    ));
+                }
+
+                TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanCLEN, CodeLengthsForCLEN, 19));
+
+                // NOTE(vak): Code lengths for literal/length and
+                // distance.
+
+                tr_u32 CodeLengths[318] = {0};
+                tr_u32 CodeLengthCount = 0;
+
+                while (CodeLengthCount < HLIT+HDIST)
+                {
+                    tr_u32 Symbol = 0;
+
+                    TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanCLEN, &BitReader, &Symbol));
+                    TR_PNG_CHECK(Symbol <= 18);
+
+                    tr_u32 RepeatValue = 0;
+                    tr_u32 RepeatCount = 1;
+
+                    if (Symbol <= 15)
+                    {
+                        RepeatValue = Symbol;
+                    }
+                    else if (Symbol <= 16)
+                    {
+                        if (CodeLengthCount == 0) return (TR_FALSE);
+
+                        tr_u32 Repeat = 0;
+                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 2));
+
+                        RepeatValue = CodeLengths[CodeLengthCount - 1];
+                        RepeatCount = 3 + Repeat;
+                    }
+                    else if (Symbol <= 17)
+                    {
+                        tr_u32 Repeat = 0;
+                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 3));
+
+                        RepeatCount = 3 + Repeat;
+                    }
+                    else if (Symbol <= 18)
+                    {
+                        tr_u32 Repeat = 0;
+                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 7));
+
+                        RepeatCount = 11 + Repeat;
+                    }
+
+                    TR_PNG_CHECK(CodeLengthCount + RepeatCount <= HLIT+HDIST);
+
+                    for (tr_u32 Index = 0; Index < RepeatCount; Index++)
+                        CodeLengths[CodeLengthCount++] = RepeatValue;
+                }
+
+                // NOTE(vak): Build Huffman lookup tables for literal/length
+                // and distance
+
+                TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanLitLen, CodeLengths + 0,    HLIT));
+                TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanDist,   CodeLengths + HLIT, HDIST));
+
+                // NOTE(vak): Start decoding
+
+                for (;;)
+                {
+                    tr_u32 Symbol = 0;
+
+                    TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanLitLen, &BitReader, &Symbol));
+                    TR_PNG_CHECK(Symbol <= 285);
+
+                    if (Symbol <= 255)
+                    {
+                        TR_PNG_CHECK(DecompressedOffset < DecompressedSize);
+                        DecompressedBytes[DecompressedOffset++] = Symbol;
+                    }
+                    else if (Symbol <= 256)
+                    {
+                        break;
+                    }
+                    else if (Symbol <= 285)
+                    {
+                        // NOTE(vak): xxxEncodings[xx]:
+                        //      [0]: Extra bits
+                        //      [1]: Base value
+
+                        static tr_u32 LengthEncodings[29][2] =
+                        {
+                            {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7},
+                            {0, 8}, {0, 9}, {0, 10}, {1, 11}, {1, 13},
+                            {1, 15}, {1, 17}, {2, 19}, {2, 23}, {2, 27},
+                            {2, 31}, {3, 35}, {3, 43}, {3, 51}, {3, 59},
+                            {4, 67}, {4, 83}, {4, 99}, {4, 115}, {5, 131},
+                            {5, 163}, {5, 195}, {5, 227}, {0, 258},
+                        };
+
+                        static tr_u32 DistanceEncodings[30][2] =
+                        {
+                            {0, 1}, {0, 2}, {0, 3}, {0, 4}, {1, 5},
+                            {1, 7}, {2, 9}, {2, 13}, {3, 17}, {3, 25},
+                            {4, 33}, {4, 49}, {5, 65}, {5, 97}, {6, 129},
+                            {6, 193}, {7, 257}, {7, 385}, {8, 513}, {8, 769},
+                            {9, 1025}, {9, 1537}, {10, 2049}, {10, 3073}, {11, 4097},
+                            {11, 6145}, {12, 8193}, {12, 12289}, {13, 16385}, {13, 24577},
+                        };
+
+                        tr_u32 LengthIndex = Symbol - 257;
+                        tr_u32 LengthExtraBits = LengthEncodings[LengthIndex][0];
+                        tr_u32 Length = LengthEncodings[LengthIndex][1];
+
+                        if (LengthExtraBits)
+                        {
+                            tr_u32 Additional = 0;
+                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Additional, LengthExtraBits));
+
+                            Length += Additional;
+                        }
+
+                        tr_u32 DistanceIndex = 0;
+
+                        TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanDist, &BitReader, &DistanceIndex));
+                        TR_PNG_CHECK(DistanceIndex <= 29);
+
+                        tr_u32 DistanceExtraBits = DistanceEncodings[DistanceIndex][0];
+                        tr_u32 Distance = DistanceEncodings[DistanceIndex][1];
+
+                        if (DistanceExtraBits)
+                        {
+                            tr_u32 Additional = 0;
+                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Additional, DistanceExtraBits));
+
+                            Distance += Additional;
+                        }
+
+                        TR_PNG_CHECK((Length > 0) && (Length <= 258));
+                        TR_PNG_CHECK((Distance > 0) && (Distance <= 32768));
+
+                        TR_PNG_CHECK(DecompressedOffset >= Distance);
+                        TR_PNG_CHECK(DecompressedOffset + Length <= DecompressedSize);
+
+                        tr_u8* Source = DecompressedBytes + DecompressedOffset - Distance;
+                        tr_u8* Dest = DecompressedBytes + DecompressedOffset;
+
+                        for (tr_u32 Index = 0; Index < Length; Index++)
+                            *Dest++ = *Source++;
+
+                        DecompressedOffset += Length;
+                    }
+                }
+            }
+            else
+            {
+                goto DecodingFailed;
+            }
+        } while (!BFINAL);
+    }
+
+    TR_PNG_CHECK(DecompressedOffset == DecompressedSize);
+
+    // NOTE(vak): Filter reconstruction
+    {
+        // NOTE(vak): https://www.w3.org/TR/png-3/#9Filters
+
+        // NOTE(vak): Pixel layout is like this
+        //      [C] [B]
+        //      [A] [X]
+        //
+        // where [X] is the current pixel that is being reconstructed.
+        // If [A], [B], or [C] are outside of the image then they're treated
+        // as zeroes.
+
+        TR_PNG_CHECK(Decoded->Channels <= 8);
+
+        tr_u64 Zero = 0;
+
+        tr_u32 LastRowAdvance = 0;
+        tr_u8* PrevDestRow = (tr_u8*)&Zero;
+
+        tr_u8* Dest = Decoded->Pixels;
+        tr_u8* Source = DecompressedBytes;
+
+        for (tr_usize Y = 0; Y < Decoded->Height; Y++)
+        {
+            tr_u8* DestRow = Dest + (Y * Decoded->Width*Decoded->Channels);
+            tr_u8* SourceRow = Source + (Y * (1 + Decoded->Width*Decoded->Channels));
+            tr_u8 Filter = *SourceRow++;
+
+            TR_PNG_CHECK(Filter <= 4);
+
+            switch (Filter)
+            {
+                case 0: // NOTE(vak): None
+                {
+                    trCopyMemory(Dest, Source, Decoded->Width*Decoded->Channels);
+                } break;
+
+                case 1: // NOTE(vak): Left
+                {
+                    tr_u8* X = SourceRow;
+                    tr_u8* A = (tr_u8*)&Zero;
+
+                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    {
+                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
+                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+
+                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
+                        {
+                            Dest[Channel] = (tr_u8)(X[Channel] + A[Channel]);
+                        }
+
+                        A = Dest;
+                    }
+                } break;
+
+                case 2: // NOTE(vak): Top
+                {
+                    tr_u8* X = SourceRow;
+                    tr_u8* B = PrevDestRow;
+
+                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    {
+                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
+                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+
+                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
+                        {
+                            Dest[Channel] = (tr_u8)(X[Channel] + B[Channel]);
+                        }
+
+                        B += LastRowAdvance;
+                    }
+                } break;
+
+                case 3: // NOTE(vak): Average
+                {
+                    tr_u8* X = SourceRow;
+                    tr_u8* A = (tr_u8*)&Zero;
+                    tr_u8* B = PrevDestRow;
+
+                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    {
+                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
+                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+
+                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
+                        {
+                            Dest[Channel] = (tr_u8)(X[Channel] + (A[Channel] + B[Channel]) / 2);
+                        }
+
+                        A = Dest;
+                        B += LastRowAdvance;
+                    }
+                } break;
+
+                case 4: // NOTE(vak): Paeth Predictor
+                {
+                    tr_u8* X = SourceRow;
+                    tr_u8* A = (tr_u8*)&Zero;
+                    tr_u8* B = PrevDestRow;
+                    tr_u8* C = (tr_u8*)&Zero;
+
+                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    {
+                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
+                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+
+                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
+                        {
+                            tr_s32 VA = (tr_s32)A[Channel];
+                            tr_s32 VB = (tr_s32)B[Channel];
+                            tr_s32 VC = (tr_s32)C[Channel];
+
+                            tr_s32 P = VA + VB - VC;
+                            tr_s32 PA = TR_ABS(P - VA);
+                            tr_s32 PB = TR_ABS(P - VB);
+                            tr_s32 PC = TR_ABS(P - VC);
+
+                            tr_u8 Predict = (tr_u8)VC;
+
+                            if ((PA <= PB) && (PA <= PC))
+                                Predict = (tr_u8)VA;
+                            else if (PB <= PC)
+                                Predict = (tr_u8)VB;
+
+                            Dest[Channel] = (tr_u8)(X[Channel] + Predict);
+                        }
+
+                        A = Dest;
+                        C = B;
+                        B += LastRowAdvance;
+                    }
+                } break;
+            }
+
+            LastRowAdvance = Decoded->Channels;
+            PrevDestRow = DestRow;
+        }
+    }
+
+    trSetArenaPosition(Arena, ResetArenaTo); // NOTE(vak): Deallocate everything except image memory (Decoded->Pixels)
+    return (TR_TRUE);
+
+DecodingFailed:
+
+    trSetArenaPosition(Arena, InitialArenaPosition); // NOTE(vak): Deallocate everything
+    return (TR_FALSE);
+
+    #undef TR_PNG_CHECK
 }
 
 /////////////////////////////////////////////////

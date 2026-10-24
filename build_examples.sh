@@ -28,5 +28,10 @@ LinkFlags=" \
 for SourceFile in example*.c; do
     OutputFile=${SourceFile%.*}
     $Compiler $CompileFlags -o $OutputFile $SourceFile $LinkFlags
+    if [ $? -eq 0 ]; then
+        echo $SourceFile
+    else
+        exit $?
+    fi
 done
 

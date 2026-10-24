@@ -98,6 +98,8 @@ typedef tr_u64  tr_b64;
 #define TR_MIN(A, B) ((A) < (B) ? (A) : (B))
 #define TR_MAX(A, B) ((A) > (B) ? (A) : (B))
 
+#define TR_ABS(A) ((A) < 0 ? -(A) : (A))
+
 #define TR_KB(Amount) ((tr_ssize)(Amount) << 10)
 #define TR_MB(Amount) ((tr_ssize)(Amount) << 20)
 #define TR_GB(Amount) ((tr_ssize)(Amount) << 30)
@@ -124,6 +126,13 @@ tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size);
 #define trZeroType(Pointer) trZeroArray(Pointer, 1)
 
 /////////////////////////////////////////////////
+// NOTE(vak): Endianness
+/////////////////////////////////////////////////
+
+tr_func tr_u16 trBigToHostEndian16(tr_u16 Value);
+tr_func tr_u32 trBigToHostEndian32(tr_u32 Value);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Strings
 /////////////////////////////////////////////////
 
@@ -135,6 +144,9 @@ typedef struct
 
 #define trStr(Literal) (tr_str){Literal, sizeof(Literal) - 1}
 #define trStrData(Data, Size) (tr_str){Data, Size}
+
+#define trStaticStr(Literal) {Literal, sizeof(Literal) - 1}
+#define trStaticStrData(Data, Size) {Data, Size}
 
 tr_func tr_str trCString(const char* A);
 
@@ -255,6 +267,9 @@ typedef enum
 
     TR_BUTTON_KEY_SPACE,
 
+    TR_BUTTON_KEY_LEFT,
+    TR_BUTTON_KEY_RIGHT,
+
     TR_BUTTON_MAX,
 } tr_button;
 
@@ -300,7 +315,15 @@ typedef tr_u32 tr_texture;
 
 #define TR_DEFAULT_TEXTURE (0) // NOTE(vak): 2x2 White Texture
 
-tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height);
+typedef enum
+{
+    TR_TEXTURE_FORMAT_NIL = 0,
+    TR_TEXTURE_FORMAT_RGB,
+    TR_TEXTURE_FORMAT_RGBA,
+    TR_TEXTURE_FORMAT_COUNT,
+} tr_texture_format;
+
+tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format Format);
 tr_func void trUploadTexture(tr_texture Texture, void* Pixels);
 
 tr_func void trSetClearColor(
@@ -366,6 +389,65 @@ tr_func void trText2D(
     tr_str Text,
     tr_f32 X, tr_f32 Y,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
+);
+
+/////////////////////////////////////////////////
+// NOTE(vak): Stream reader
+/////////////////////////////////////////////////
+
+typedef struct tr_reader_chunk tr_reader_chunk;
+struct tr_reader_chunk
+{
+    void* Data;
+    tr_usize Size;
+    tr_reader_chunk* Next;
+};
+
+typedef struct
+{
+    tr_u8* At;
+    tr_usize Remaining;
+
+    tr_reader_chunk* FirstChunk;
+    tr_reader_chunk* LastChunk;
+} tr_reader;
+
+tr_func tr_reader trMakeReader(void* Data, tr_usize Size);
+tr_func void* trReaderConsumeSize(tr_reader* Reader, tr_usize Size);
+tr_func tr_b32 trReaderConsumeToBuffer(tr_reader* Reader, tr_usize Size, void* Buffer);
+tr_func tr_b32 trReaderAddChunk(tr_reader* Reader, tr_arena* Arena, void* Data, tr_usize Size);
+
+#define trReaderConsumeInto(Reader, Pointer) trReaderConsumeToBuffer(Reader, sizeof(*(Pointer)), Pointer)
+
+typedef struct
+{
+    tr_reader* Reader;
+    tr_u64 BitBuffer;
+    tr_usize BitCount;
+} tr_bit_reader;
+
+tr_func tr_bit_reader trMakeBitReader(tr_reader* Reader);
+tr_func tr_b32 trBitReaderConsume(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount);
+tr_func tr_b32 trBitReaderPeek(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount);
+tr_func tr_b32 trBitReaderAdvance(tr_bit_reader* BitReader, tr_usize BitCount);
+
+/////////////////////////////////////////////////
+// NOTE(vak): PNG
+/////////////////////////////////////////////////
+
+typedef struct
+{
+    tr_u32 Width;
+    tr_u32 Height;
+    tr_u32 Channels; // NOTE(vak): Always 8 bits/channel
+    void* Pixels;
+} tr_decoded_png;
+
+tr_func tr_b32 trDecodePNG(
+    tr_decoded_png* Decoded,
+    tr_arena* Arena,
+    void* Data,
+    tr_usize DataSize
 );
 
 /////////////////////////////////////////////////

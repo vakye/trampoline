@@ -13,7 +13,7 @@ void Setup(void)
         0x80000000, 0xFFFFFFFF, 0x80000000, 0xFFFFFFFF,
     };
 
-    CheckerTexture = trMakeTexture(4, 4);
+    CheckerTexture = trMakeTexture(4, 4, TR_TEXTURE_FORMAT_RGBA);
 
     trUploadTexture(CheckerTexture, CheckerImage);
 }
