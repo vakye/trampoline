@@ -2037,15 +2037,30 @@ tr_func void trVulkanMakeTexture(
 {
     trZeroType(Texture);
 
+    tr_b32 IsSRGB =
+        (Format == VK_FORMAT_R8G8B8_SRGB) ||
+        (Format == VK_FORMAT_R8G8B8A8_SRGB);
+
     Texture->Width = Width;
     Texture->Height = Height;
     Texture->Format = Format;
+
+    // NOTE(vak): At the time of this comment, B8G8R8A8 seems to
+    // be the most widely supported image format, so it is always
+    // used as the internal storage format of the image. However,
+    // the actual pixel data sent to the GPU will always be RGBA.
+    // The swizzling (see image view creation below) is setup so
+    // that the RGBA pixel data is read correctly.
+
+    // NOTE(vak): Optimal tiled image format feature flag coverge
+    // for all platforms can be found at:
+    //      https://vulkan.gpuinfo.org/listoptimaltilingformats.php
 
     VkImageCreateInfo ImageInfo =
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .format = (IsSRGB) ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM,
         .extent = {.width = Width, .height = Height, .depth = 1},
         .mipLevels = 1,
         .arrayLayers = 1,
@@ -2078,13 +2093,18 @@ tr_func void trVulkanMakeTexture(
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = Texture->Image,
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .format = ImageInfo.format,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .components =
         {
-            .r = VK_COMPONENT_SWIZZLE_R,
+            // NOTE(vak): We upload RGBA pixel data, but our
+            // texture format is BGRA, so we have to setup
+            // swizzling to get the correct components when
+            // fetching texels.
+
+            .r = VK_COMPONENT_SWIZZLE_B,
             .g = VK_COMPONENT_SWIZZLE_G,
-            .b = VK_COMPONENT_SWIZZLE_B,
+            .b = VK_COMPONENT_SWIZZLE_R,
             .a = VK_COMPONENT_SWIZZLE_A,
         },
         .subresourceRange =
@@ -3192,8 +3212,10 @@ tr_func tr_texture trMakeTexture(tr_u32 Width, tr_u32 Height, tr_texture_format 
     {
         default: TR_ASSERT(!"Missing texture format to vulkan image format conversion");
 
-        case TR_TEXTURE_FORMAT_RGB:  ImageFormat = VK_FORMAT_R8G8B8_UNORM; break;
-        case TR_TEXTURE_FORMAT_RGBA: ImageFormat = VK_FORMAT_R8G8B8A8_UNORM; break;
+        case TR_TEXTURE_FORMAT_RGB:         ImageFormat = VK_FORMAT_R8G8B8_UNORM; break;
+        case TR_TEXTURE_FORMAT_RGBA:        ImageFormat = VK_FORMAT_R8G8B8A8_UNORM; break;
+        case TR_TEXTURE_FORMAT_RGB_SRGB:    ImageFormat = VK_FORMAT_R8G8B8_SRGB; break;
+        case TR_TEXTURE_FORMAT_RGBA_SRGB:   ImageFormat = VK_FORMAT_R8G8B8A8_SRGB; break;
     }
 
     tr_texture TextureIndex = trVulkan.TextureCount++;
@@ -3263,6 +3285,7 @@ tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
             default: TR_ASSERT(!"Missing RGBA conversion in trUploadTexture (Vulkan backend)"); break;
 
             case VK_FORMAT_R8G8B8_UNORM:
+            case VK_FORMAT_R8G8B8_SRGB:
             {
                 tr_u8* Dest   = (tr_u8*)trVulkan.TransferBuffer.Mapping;
                 tr_u8* Source = (tr_u8*)Pixels + 3*Internal->Width*SourceRow;
@@ -3283,6 +3306,7 @@ tr_func void trUploadTexture(tr_texture Texture, void* Pixels)
             } break;
 
             case VK_FORMAT_R8G8B8A8_UNORM:
+            case VK_FORMAT_R8G8B8A8_SRGB:
             {
                 trCopyMemory(
                     trVulkan.TransferBuffer.Mapping,

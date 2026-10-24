@@ -318,8 +318,13 @@ typedef tr_u32 tr_texture;
 typedef enum
 {
     TR_TEXTURE_FORMAT_NIL = 0,
+
     TR_TEXTURE_FORMAT_RGB,
     TR_TEXTURE_FORMAT_RGBA,
+
+    TR_TEXTURE_FORMAT_RGB_SRGB,
+    TR_TEXTURE_FORMAT_RGBA_SRGB,
+
     TR_TEXTURE_FORMAT_COUNT,
 } tr_texture_format;
 
