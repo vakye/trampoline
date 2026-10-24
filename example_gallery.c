@@ -76,6 +76,8 @@ void Setup(void)
 
 void Frame(tr_f32 LastFrameTime)
 {
+    trSetClearColor(0.0f, 0.0f, 0.0f, 0.25f);
+
     gallery_entry* Entry = Entries + CurrentEntryIndex;
 
     if (trIsButtonPressed(TR_BUTTON_KEY_LEFT))

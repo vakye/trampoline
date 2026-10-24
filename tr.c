@@ -3473,6 +3473,18 @@ tr_func void trVulkanBeginFrame(void)
             SurfaceCaps.maxImageCount
         );
 
+        tr_b32 PremulSupported = (
+            SurfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
+        ) != 0;
+
+        tr_b32 PostmulSupported = (
+            SurfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR
+        ) != 0;
+
+        VkCompositeAlphaFlagsKHR CompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        if (PostmulSupported) CompositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        if (PremulSupported) CompositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+
         VkSwapchainCreateInfoKHR SwapchainInfo =
         {
             .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -3485,7 +3497,7 @@ tr_func void trVulkanBeginFrame(void)
             .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .preTransform = SurfaceCaps.currentTransform,
-            .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+            .compositeAlpha = CompositeAlpha,
             .presentMode = trVulkan.PresentMode,
             .clipped = VK_TRUE,
         };
