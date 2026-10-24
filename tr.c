@@ -4573,20 +4573,16 @@ tr_func tr_b32 trBuildHuffmanPNG(
         tr_u32 EntryCount = (1 << BitsRemaining);
         tr_u32 Code = NextCodes[CodeLength]++;
 
+        tr_u32 BaseEntryIndex = (Code << BitsRemaining);
+        BaseEntryIndex = ((BaseEntryIndex & 0xAAAA) >> 1) | ((BaseEntryIndex & 0x5555) << 1);
+        BaseEntryIndex = ((BaseEntryIndex & 0xCCCC) >> 2) | ((BaseEntryIndex & 0x3333) << 2);
+        BaseEntryIndex = ((BaseEntryIndex & 0xF0F0) >> 4) | ((BaseEntryIndex & 0x0F0F) << 4);
+        BaseEntryIndex = ((BaseEntryIndex & 0xFF00) >> 8) | ((BaseEntryIndex & 0x00FF) << 8);
+        BaseEntryIndex >>= (16 - Huffman->BitCount);
+
         for (tr_u32 EntryIndex = 0; EntryIndex < EntryCount; EntryIndex++)
         {
-            tr_u32 FullIndex = (Code << BitsRemaining) + EntryIndex;
-
-            // NOTE(vak): Reverse bits
-
-            tr_u32 BitReversedIndex = FullIndex;
-            BitReversedIndex = ((BitReversedIndex & 0xAAAA) >> 1) | ((BitReversedIndex & 0x5555) << 1);
-            BitReversedIndex = ((BitReversedIndex & 0xCCCC) >> 2) | ((BitReversedIndex & 0x3333) << 2);
-            BitReversedIndex = ((BitReversedIndex & 0xF0F0) >> 4) | ((BitReversedIndex & 0x0F0F) << 4);
-            BitReversedIndex = ((BitReversedIndex & 0xFF00) >> 8) | ((BitReversedIndex & 0x00FF) << 8);
-            BitReversedIndex >>= (16 - Huffman->BitCount);
-
-            tr_png_huffman_entry* Entry = Huffman->Entries + BitReversedIndex;
+            tr_png_huffman_entry* Entry = Huffman->Entries + BaseEntryIndex + (EntryIndex << CodeLength);
 
             // NOTE(vak): Something is wrong if we're overwriting entries...
             if (Entry->BitCount > 0)
@@ -4895,7 +4891,7 @@ tr_func tr_b32 trDecodePNG(
 
                     // NOTE(vak): Code lengths for code lengths... (literally)
 
-                    tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+                    static tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
                     tr_u32 CodeLengthsForCLEN[19] = {0};
 
                     for (tr_u32 Index = 0; Index < HCLEN; Index++)
