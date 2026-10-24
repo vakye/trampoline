@@ -4576,16 +4576,15 @@ tr_func tr_b32 trBuildHuffmanPNG(
         for (tr_u32 EntryIndex = 0; EntryIndex < EntryCount; EntryIndex++)
         {
             tr_u32 FullIndex = (Code << BitsRemaining) + EntryIndex;
-            tr_u32 BitReversedIndex = 0;
 
-            for (tr_u32 BitIndex = 0; BitIndex <= Huffman->BitCount/2; BitIndex++)
-            {
-                tr_u32 A = BitIndex;
-                tr_u32 B = Huffman->BitCount - BitIndex - 1;
+            // NOTE(vak): Reverse bits
 
-                BitReversedIndex |= ((FullIndex >> B) & 1) << A;
-                BitReversedIndex |= ((FullIndex >> A) & 1) << B;
-            }
+            tr_u32 BitReversedIndex = FullIndex;
+            BitReversedIndex = ((BitReversedIndex & 0xAAAA) >> 1) | ((BitReversedIndex & 0x5555) << 1);
+            BitReversedIndex = ((BitReversedIndex & 0xCCCC) >> 2) | ((BitReversedIndex & 0x3333) << 2);
+            BitReversedIndex = ((BitReversedIndex & 0xF0F0) >> 4) | ((BitReversedIndex & 0x0F0F) << 4);
+            BitReversedIndex = ((BitReversedIndex & 0xFF00) >> 8) | ((BitReversedIndex & 0x00FF) << 8);
+            BitReversedIndex >>= (16 - Huffman->BitCount);
 
             tr_png_huffman_entry* Entry = Huffman->Entries + BitReversedIndex;
 
@@ -5277,20 +5276,35 @@ DecodingFailed:
 }
 
 /////////////////////////////////////////////////
-// NOTE(vak): CRT stuff
+// NOTE(vak): CRT stuff for freestanding (no
+// stdlib) builds.
 /////////////////////////////////////////////////
 
-void* memset(void* DestInit, tr_s32 Byte, tr_usize Size)
+#if TR_COMPILER_GCC && !TR_COMPILER_CLANG
+// NOTE(vak): Without this, GCC would try to be clever and generate
+// a call to memset... inside of memset, which leads to infinite
+// recursion...
+__attribute__((optimize("no-tree-loop-distribute-patterns")))
+#endif
+
+void* memset(void* DestInit, tr_s32 ByteInit, tr_usize Size)
 {
     tr_u8* Dest = (tr_u8*)DestInit;
 
     while (Size--)
-        *Dest++ = (tr_u8)Byte;
+        *Dest++ = (tr_u8)ByteInit;
 
     return (DestInit);
 }
 
-void* memcpy(void* DestInit, void* SourceInit, tr_usize Size)
+#if TR_COMPILER_GCC && !TR_COMPILER_CLANG
+// NOTE(vak): Without this, GCC would try to be clever and generate
+// a call to memcpy... inside of memcpy, which leads to infinite
+// recursion...
+__attribute__((optimize("no-tree-loop-distribute-patterns")))
+#endif
+
+void* memcpy(void* DestInit, const void* SourceInit, tr_usize Size)
 {
     tr_u8* Dest = (tr_u8*)DestInit;
     tr_u8* Source = (tr_u8*)SourceInit;

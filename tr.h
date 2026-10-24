@@ -3,6 +3,22 @@
 #define __TR_H__ 1
 
 /////////////////////////////////////////////////
+// NOTE(vak): Compiler
+/////////////////////////////////////////////////
+
+#if defined(__clang__)
+    #define TR_COMPILER_CLANG (1)
+#endif
+
+#if defined(_MSC_VER)
+    #define TR_COMPILER_MSVC (1)
+#elif defined(__GNUC__)
+    #define TR_COMPILER_GCC (1)
+#else
+    #error Unknown compiler
+#endif
+
+/////////////////////////////////////////////////
 // NOTE(vak): Architecture
 /////////////////////////////////////////////////
 
@@ -51,12 +67,22 @@
 typedef signed char         tr_s8;
 typedef signed short        tr_s16;
 typedef signed int          tr_s32;
+
+#if TR_PLATFORM_WINDOWS
 typedef signed long long    tr_s64;
+#else
+typedef signed long         tr_s64;
+#endif
 
 typedef unsigned char       tr_u8;
 typedef unsigned short      tr_u16;
 typedef unsigned int        tr_u32;
+
+#if TR_PLATFORM_WINDOWS
 typedef unsigned long long  tr_u64;
+#else
+typedef unsigned long       tr_u64;
+#endif
 
 typedef tr_s64 tr_ssize;
 typedef tr_u64 tr_usize;
