@@ -4685,6 +4685,7 @@ tr_func tr_b32 trDecodePNG(
                 {
                     TR_PNG_CHECK(ChunkIndex == 0);
                     TR_PNG_CHECK(ChunkLength == sizeof(tr_png_ihdr));
+                    TR_PNG_CHECK(!EncounteredIHDR);
 
                     tr_png_ihdr* IHDR = (tr_png_ihdr*)ChunkData;
 
@@ -4821,10 +4822,10 @@ tr_func tr_b32 trDecodePNG(
         {
             TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BFINAL, 1));
             TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BTYPE,  2));
+            TR_PNG_CHECK(BTYPE <= 0x02);
 
             if (BTYPE == 0x00)
             {
-                // TODO(vak): !!!! Actually test if this thing works or not!!!!
                 // NOTE(vak): Uncompressed
 
                 // NOTE(vak): We're reading in a bytestream, so reset bit reader
@@ -4868,92 +4869,132 @@ tr_func tr_b32 trDecodePNG(
                     Remaining -= ConsumeSize;
                 }
             }
-            else if (BTYPE == 0x01)
+            else if ((BTYPE == 0x01) || (BTYPE == 0x02))
             {
-                // NOTE(vak): Compressed with static huffman codes
-                // TODO(vak): Implement this
-            }
-            else if (BTYPE == 0x02)
-            {
-                // NOTE(vak): Compressed with dynamic huffman codes
-
                 tr_u32 HLIT  = 0;
                 tr_u32 HDIST = 0;
-                tr_u32 HCLEN = 0;
 
-                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HLIT,  5));
-                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HDIST, 5));
-                TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HCLEN, 4));
+                tr_u32 CodeLengths[320] = {0}; // NOTE(vak): Combined HLIT + HDIST code length table
 
-                HLIT  += 257;
-                HDIST += 1;
-                HCLEN += 4;
-
-                // NOTE(vak): Code lengths for code lengths... (literally)
-
-                tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-                tr_u32 CodeLengthsForCLEN[19] = {0};
-
-                for (tr_u32 Index = 0; Index < HCLEN; Index++)
+                if (BTYPE == 0x02)
                 {
-                    TR_PNG_CHECK(trBitReaderConsume(
-                        &BitReader,
-                        &CodeLengthsForCLEN[Swizzle[Index]],
-                        3
-                    ));
+                    // NOTE(vak): BTYPE=0x02, Compressed with dynamic huffman codes
+
+                    tr_u32 HCLEN = 0;
+
+                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HLIT,  5));
+                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HDIST, 5));
+                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HCLEN, 4));
+
+                    HLIT  += 257;
+                    HDIST += 1;
+                    HCLEN += 4;
+
+                    // NOTE(vak): 286, 287 don't appear in the actual data so the dynamic
+                    // huffman code compression shouldn't emit them
+                    TR_PNG_CHECK(HLIT <= 286);
+
+                    // NOTE(vak): Code lengths for code lengths... (literally)
+
+                    tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+                    tr_u32 CodeLengthsForCLEN[19] = {0};
+
+                    for (tr_u32 Index = 0; Index < HCLEN; Index++)
+                    {
+                        TR_PNG_CHECK(trBitReaderConsume(
+                            &BitReader,
+                            &CodeLengthsForCLEN[Swizzle[Index]],
+                            3
+                        ));
+                    }
+
+                    TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanCLEN, CodeLengthsForCLEN, 19));
+
+                    // NOTE(vak): Code lengths for literal/length and
+                    // distance.
+
+                    tr_u32 CodeLengthCount = 0;
+
+                    while (CodeLengthCount < HLIT+HDIST)
+                    {
+                        tr_u32 Symbol = 0;
+
+                        TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanCLEN, &BitReader, &Symbol));
+                        TR_PNG_CHECK(Symbol <= 18);
+
+                        tr_u32 RepeatValue = 0;
+                        tr_u32 RepeatCount = 1;
+
+                        if (Symbol <= 15)
+                        {
+                            RepeatValue = Symbol;
+                        }
+                        else if (Symbol <= 16)
+                        {
+                            if (CodeLengthCount == 0) return (TR_FALSE);
+
+                            tr_u32 Repeat = 0;
+                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 2));
+
+                            RepeatValue = CodeLengths[CodeLengthCount - 1];
+                            RepeatCount = 3 + Repeat;
+                        }
+                        else if (Symbol <= 17)
+                        {
+                            tr_u32 Repeat = 0;
+                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 3));
+
+                            RepeatCount = 3 + Repeat;
+                        }
+                        else if (Symbol <= 18)
+                        {
+                            tr_u32 Repeat = 0;
+                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 7));
+
+                            RepeatCount = 11 + Repeat;
+                        }
+
+                        TR_PNG_CHECK(CodeLengthCount + RepeatCount <= HLIT+HDIST);
+
+                        for (tr_u32 Index = 0; Index < RepeatCount; Index++)
+                            CodeLengths[CodeLengthCount++] = RepeatValue;
+                    }
                 }
-
-                TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanCLEN, CodeLengthsForCLEN, 19));
-
-                // NOTE(vak): Code lengths for literal/length and
-                // distance.
-
-                tr_u32 CodeLengths[318] = {0};
-                tr_u32 CodeLengthCount = 0;
-
-                while (CodeLengthCount < HLIT+HDIST)
+                else
                 {
+                    // TODO(vak): Find a PNG image with BTYPE=0x01 and test this out.
+                    // Absolutely no idea if this actually works as intended per spec.
+
+                    // NOTE(vak): BTYPE=0x01, Compressed with static Huffman codes
+
+                    // NOTE(vak): Encodings[xx]:
+                    //      [0]: End symbol
+                    //      [1]: Code length
+
+                    HLIT = 288;
+                    HDIST = 32;
+
+                    static tr_u32 Encodings[5][2] =
+                    {
+                        {143, 8},
+                        {255, 9},
+                        {279, 7},
+                        {287, 8},
+                        {319, 5},
+                    };
+
                     tr_u32 Symbol = 0;
 
-                    TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanCLEN, &BitReader, &Symbol));
-                    TR_PNG_CHECK(Symbol <= 18);
-
-                    tr_u32 RepeatValue = 0;
-                    tr_u32 RepeatCount = 1;
-
-                    if (Symbol <= 15)
+                    for (tr_u32 Index = 0; Index < TR_ARRAY_COUNT(Encodings); Index++)
                     {
-                        RepeatValue = Symbol;
-                    }
-                    else if (Symbol <= 16)
-                    {
-                        if (CodeLengthCount == 0) return (TR_FALSE);
+                        tr_u32 EndSymbol = Encodings[Index][0];
+                        tr_u32 CodeLength = Encodings[Index][1];
 
-                        tr_u32 Repeat = 0;
-                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 2));
-
-                        RepeatValue = CodeLengths[CodeLengthCount - 1];
-                        RepeatCount = 3 + Repeat;
-                    }
-                    else if (Symbol <= 17)
-                    {
-                        tr_u32 Repeat = 0;
-                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 3));
-
-                        RepeatCount = 3 + Repeat;
-                    }
-                    else if (Symbol <= 18)
-                    {
-                        tr_u32 Repeat = 0;
-                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 7));
-
-                        RepeatCount = 11 + Repeat;
+                        while (Symbol <= EndSymbol)
+                            CodeLengths[Symbol++] = CodeLength;
                     }
 
-                    TR_PNG_CHECK(CodeLengthCount + RepeatCount <= HLIT+HDIST);
-
-                    for (tr_u32 Index = 0; Index < RepeatCount; Index++)
-                        CodeLengths[CodeLengthCount++] = RepeatValue;
+                    TR_PNG_CHECK(Symbol == 320);
                 }
 
                 // NOTE(vak): Build Huffman lookup tables for literal/length
@@ -5010,13 +5051,9 @@ tr_func tr_b32 trDecodePNG(
                         tr_u32 LengthExtraBits = LengthEncodings[LengthIndex][0];
                         tr_u32 Length = LengthEncodings[LengthIndex][1];
 
-                        if (LengthExtraBits)
-                        {
-                            tr_u32 Additional = 0;
-                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Additional, LengthExtraBits));
-
-                            Length += Additional;
-                        }
+                        tr_u32 AdditionalLength = 0;
+                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &AdditionalLength, LengthExtraBits));
+                        Length += AdditionalLength;
 
                         tr_u32 DistanceIndex = 0;
 
@@ -5026,13 +5063,9 @@ tr_func tr_b32 trDecodePNG(
                         tr_u32 DistanceExtraBits = DistanceEncodings[DistanceIndex][0];
                         tr_u32 Distance = DistanceEncodings[DistanceIndex][1];
 
-                        if (DistanceExtraBits)
-                        {
-                            tr_u32 Additional = 0;
-                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Additional, DistanceExtraBits));
-
-                            Distance += Additional;
-                        }
+                        tr_u32 AdditionalDistance = 0;
+                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &AdditionalDistance, DistanceExtraBits));
+                        Distance += AdditionalDistance;
 
                         TR_PNG_CHECK((Length > 0) && (Length <= 258));
                         TR_PNG_CHECK((Distance > 0) && (Distance <= 32768));
@@ -5049,10 +5082,6 @@ tr_func tr_b32 trDecodePNG(
                         DecompressedOffset += Length;
                     }
                 }
-            }
-            else
-            {
-                goto DecodingFailed;
             }
         } while (!BFINAL);
     }

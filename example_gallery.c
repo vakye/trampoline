@@ -15,8 +15,6 @@ static gallery_entry Entries[] =
     {trStaticStr("art1.png"), trStaticStr("n/a (pixiv 108016082)"), 0, 0, 0},
     {trStaticStr("art2.png"), trStaticStr("Homutan (pixiv 58914348)"), 0, 0, 0},
     {trStaticStr("art3.png"), trStaticStr("OOZ (pixiv 9763273)"), 0, 0, 0},
-    {trStaticStr("test1.png"), trStaticStr("n/a"), 0, 0, 0},
-    {trStaticStr("test2.png"), trStaticStr("n/a"), 0, 0, 0},
 };
 
 static tr_u32 CurrentEntryIndex = 0;
@@ -29,13 +27,31 @@ void Setup(void)
     {
         gallery_entry* Entry = Entries + Index;
 
+        trPrint(trStr("Loading '"));
+        trPrint(Entry->FilePath);
+        trPrint(trStr("'"));
+
+        tr_clock BeginTime = trGetWallClock();
+
         Entry->Texture = trLoadTexture(Entry->FilePath);
+
+        tr_clock EndTime = trGetWallClock();
 
         if (Entry->Texture)
         {
+            trPrint(trStr(": Done in "));
+            trPrintF64(1000.0 * trGetSecondsElapsed(BeginTime, EndTime));
+            trPrint(trStr("ms"));
+
             Entry->Width = trGetTextureWidth(Entry->Texture);
             Entry->Height = trGetTextureHeight(Entry->Texture);
         }
+        else
+        {
+            trPrint(trStr(": Failed"));
+        }
+
+        trPrintNewLine();
     }
 }
 
