@@ -74,13 +74,8 @@ void Frame(tr_f32 LastFrameTime)
     }
 
     tr_texture Texture = Entry->Texture;
-
-    // NOTE(vak): Scale width and height up so that small images
-    // aren't displayed as a really, really small image. Bigger
-    // images will be fitted within the canvas by the code below.
-
-    tr_u32 Width = 10*Entry->Width;
-    tr_u32 Height = 10*Entry->Height;
+    tr_u32 Width = Entry->Width;
+    tr_u32 Height = Entry->Height;
 
     tr_f32 WindowW = trGetWindowWidth();
     tr_f32 WindowH = trGetWindowHeight();
@@ -90,14 +85,8 @@ void Frame(tr_f32 LastFrameTime)
 
     // NOTE(vak): Fit image within canvas
 
-    tr_f32 DisplayW = Width;
-    tr_f32 DisplayH = Height;
-
-    if (DisplayW > CanvasW)
-    {
-        DisplayW = CanvasW;
-        DisplayH = DisplayW * ((tr_f32)Height / (tr_f32)Width);
-    }
+    tr_f32 DisplayW = CanvasW;
+    tr_f32 DisplayH = DisplayW * ((tr_f32)Height / (tr_f32)Width);
 
     if (DisplayH > CanvasH)
     {
