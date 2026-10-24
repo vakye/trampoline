@@ -4564,6 +4564,8 @@ tr_func tr_b32 trDecodePNG(
     tr_reader DataReader = {0}; // NOTE(vak): Linked list of IDAT chunks
     tr_usize ResetArenaTo = InitialArenaPosition; // NOTE(vak): Position to reset arena to after the decoder is finished
 
+    tr_usize BytesPerChannel = 0;
+
     // NOTE(vak): Signature and chunks
     {
         tr_reader Reader = trMakeReader(Data, DataSize);
@@ -4604,6 +4606,7 @@ tr_func tr_b32 trDecodePNG(
 
                     Decoded->Width = trBigToHostEndian32(IHDR->Width);
                     Decoded->Height = trBigToHostEndian32(IHDR->Height);
+                    BytesPerChannel = IHDR->BitDepth / 8; // NOTE(vak): We only do 8, 16 bit depth so this is okay
 
                     switch (IHDR->ColorType)
                     {
@@ -4618,7 +4621,7 @@ tr_func tr_b32 trDecodePNG(
                     tr_b32 IsValid = TR_TRUE;
 
                     IsValid &= (Decoded->Width != 0) && (Decoded->Height != 0);
-                    IsValid &= (IHDR->BitDepth == 8);
+                    IsValid &= (IHDR->BitDepth == 8) || (IHDR->BitDepth == 16);
                     IsValid &= (Decoded->Channels != 0);
                     IsValid &= (IHDR->CompressionMethod == 0);
                     IsValid &= (IHDR->FilterMethod == 0);
@@ -4630,6 +4633,8 @@ tr_func tr_b32 trDecodePNG(
                     // reset position. Every single arena allocation made after
                     // the main image allocation is treated as temporary working
                     // memory for the decoder, and will be resetted at the end.
+
+                    // NOTE(vak): Decoded->Pixels will always be in RGBA8 format
 
                     Decoded->Pixels = trPushArenaZero(
                         Arena,
@@ -4668,9 +4673,11 @@ tr_func tr_b32 trDecodePNG(
         TR_PNG_CHECK(EncounteredIEND);
     }
 
+    TR_PNG_CHECK((BytesPerChannel == 1) || (BytesPerChannel == 2));
     TR_PNG_CHECK(DataReader.FirstChunk);
 
-    tr_usize DecompressedSize = (1 + Decoded->Width*Decoded->Channels) * Decoded->Height;
+    tr_usize DecompressedRowSize = 1 + Decoded->Width * Decoded->Channels * BytesPerChannel;
+    tr_usize DecompressedSize = DecompressedRowSize * Decoded->Height;
 
     tr_u8* DecompressedBytes = trPushArenaZero(
         Arena,
@@ -4980,9 +4987,10 @@ tr_func tr_b32 trDecodePNG(
         // If [A], [B], or [C] are outside of the image then they're treated
         // as zeroes.
 
-        TR_PNG_CHECK(Decoded->Channels <= 8);
+        TR_PNG_CHECK(Decoded->Channels <= 4);
+        TR_PNG_CHECK((BytesPerChannel == 1) || (BytesPerChannel == 2));
 
-        tr_u64 Zero = 0;
+        tr_u32 Zero = 0;
 
         tr_u32 LastRowAdvance = 0;
         tr_u8* PrevDestRow = (tr_u8*)&Zero;
@@ -4993,16 +5001,42 @@ tr_func tr_b32 trDecodePNG(
         for (tr_usize Y = 0; Y < Decoded->Height; Y++)
         {
             tr_u8* DestRow = Dest + (Y * Decoded->Width*Decoded->Channels);
-            tr_u8* SourceRow = Source + (Y * (1 + Decoded->Width*Decoded->Channels));
+            tr_u8* SourceRow = Source + (Y * (1 + Decoded->Width*Decoded->Channels*BytesPerChannel));
             tr_u8 Filter = *SourceRow++;
 
             TR_PNG_CHECK(Filter <= 4);
+
+            // NOTE(vak): This TR_PNG_SOURCE_OFFSET macro is a trick to make things work for
+            // both 8 bit-depth and 16 bit-depth.
+
+            // For 8 bit depth, we just take the byte as is, so the "BytesPerChannel"
+            // multiplication is just an identity (multiplication by 1).
+
+            // For 16 bit depth, we want to extract the higher 8-bit part (equivalent to
+            // division by 256), so we take the first byte in a channel since the encoding is big endian.
+            // This actually introduces inaccuracies as the more accurate thing to do would be to
+            // divide by 257 and round to the nearest integer. However, this is simpler, so
+            // I prefer doing it this way :)
+
+            #define TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel) \
+                ((BytesPerChannel) * (Channel))
 
             switch (Filter)
             {
                 case 0: // NOTE(vak): None
                 {
-                    trCopyMemory(Dest, Source, Decoded->Width*Decoded->Channels);
+                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    {
+                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
+                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
+
+                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
+                        {
+                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
+
+                            Dest[Channel] = (tr_u8)(X[SourceOffset]);
+                        }
+                    }
                 } break;
 
                 case 1: // NOTE(vak): Left
@@ -5012,12 +5046,14 @@ tr_func tr_b32 trDecodePNG(
 
                     for (tr_usize Index = 0; Index < Decoded->Width; Index++)
                     {
-                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
-                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
+                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
 
                         for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
                         {
-                            Dest[Channel] = (tr_u8)(X[Channel] + A[Channel]);
+                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
+
+                            Dest[Channel] = (tr_u8)(X[SourceOffset] + A[Channel]);
                         }
 
                         A = Dest;
@@ -5031,12 +5067,14 @@ tr_func tr_b32 trDecodePNG(
 
                     for (tr_usize Index = 0; Index < Decoded->Width; Index++)
                     {
-                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
-                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
+                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
 
                         for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
                         {
-                            Dest[Channel] = (tr_u8)(X[Channel] + B[Channel]);
+                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
+
+                            Dest[Channel] = (tr_u8)(X[SourceOffset] + B[Channel]);
                         }
 
                         B += LastRowAdvance;
@@ -5051,12 +5089,14 @@ tr_func tr_b32 trDecodePNG(
 
                     for (tr_usize Index = 0; Index < Decoded->Width; Index++)
                     {
-                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
-                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
+                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
 
                         for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
                         {
-                            Dest[Channel] = (tr_u8)(X[Channel] + (A[Channel] + B[Channel]) / 2);
+                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
+
+                            Dest[Channel] = (tr_u8)(X[SourceOffset] + (A[Channel] + B[Channel]) / 2);
                         }
 
                         A = Dest;
@@ -5073,8 +5113,8 @@ tr_func tr_b32 trDecodePNG(
 
                     for (tr_usize Index = 0; Index < Decoded->Width; Index++)
                     {
-                        tr_u8* Dest = DestRow + Index*Decoded->Channels;
-                        tr_u8* X = SourceRow + Index*Decoded->Channels;
+                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
+                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
 
                         for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
                         {
@@ -5094,7 +5134,9 @@ tr_func tr_b32 trDecodePNG(
                             else if (PB <= PC)
                                 Predict = (tr_u8)VB;
 
-                            Dest[Channel] = (tr_u8)(X[Channel] + Predict);
+                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
+
+                            Dest[Channel] = (tr_u8)(X[SourceOffset] + Predict);
                         }
 
                         A = Dest;

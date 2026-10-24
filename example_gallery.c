@@ -15,6 +15,8 @@ static gallery_entry Entries[] =
     {trStaticStr("art1.png"), trStaticStr("n/a (pixiv 108016082)"), 0, 0, 0},
     {trStaticStr("art2.png"), trStaticStr("Homutan (pixiv 58914348)"), 0, 0, 0},
     {trStaticStr("art3.png"), trStaticStr("OOZ (pixiv 9763273)"), 0, 0, 0},
+    {trStaticStr("test1.png"), trStaticStr("n/a"), 0, 0, 0},
+    {trStaticStr("test2.png"), trStaticStr("n/a"), 0, 0, 0},
 };
 
 static tr_u32 CurrentEntryIndex = 0;
@@ -93,8 +95,13 @@ void Frame(tr_f32 LastFrameTime)
     }
 
     tr_texture Texture = Entry->Texture;
-    tr_u32 Width = Entry->Width;
-    tr_u32 Height = Entry->Height;
+
+    // NOTE(vak): Scale width and height up so that small images
+    // aren't displayed as a really, really small image. Bigger
+    // images will be fitted within the canvas by the code below.
+
+    tr_u32 Width = 10*Entry->Width;
+    tr_u32 Height = 10*Entry->Height;
 
     tr_f32 WindowW = trGetWindowWidth();
     tr_f32 WindowH = trGetWindowHeight();
