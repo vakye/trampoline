@@ -278,6 +278,7 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 tr_func tr_f64 trGetTargetFPS(void);
 tr_func void trSetTargetFPS(tr_f64 FPS);
 
+tr_func void trToggleFullscreen(void);
 tr_func tr_u32 trGetWindowWidth(void);
 tr_func tr_u32 trGetWindowHeight(void);
 
@@ -296,6 +297,8 @@ typedef enum
 
     TR_BUTTON_KEY_LEFT,
     TR_BUTTON_KEY_RIGHT,
+
+    TR_BUTTON_KEY_F11,
 
     TR_BUTTON_MAX,
 } tr_button;

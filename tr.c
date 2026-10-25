@@ -600,6 +600,7 @@ tr_func void trLinuxWaylandSetup(void);
 tr_func tr_b32 trLinuxWaylandShouldQuit(void);
 tr_func void trLinuxWaylandPollEvents(void);
 tr_func void trLinuxWaylandPresent(void);
+tr_func void trLinuxWaylandToggleFullscreen(void);
 tr_func tr_u32 trLinuxWaylandGetWindowWidth(void);
 tr_func tr_u32 trLinuxWaylandGetWindowHeight(void);
 tr_func tr_f32 trLinuxWaylandGetMouseX(void);
@@ -673,6 +674,11 @@ tr_func tr_f64 trGetTargetFPS(void)
 tr_func void trSetTargetFPS(tr_f64 FPS)
 {
     trLinux.TargetFPS = FPS;
+}
+
+tr_func void trToggleFullscreen(void)
+{
+    trLinuxWaylandToggleFullscreen();
 }
 
 tr_func tr_u32 trGetWindowWidth(void)
@@ -1101,6 +1107,20 @@ xdg_toplevel_add_listener(struct xdg_toplevel *xdg_toplevel,
 				     (void (**)(void)) listener, data);
 }
 
+static inline void
+xdg_toplevel_set_fullscreen(struct xdg_toplevel *xdg_toplevel, struct wl_output *wl_output)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) xdg_toplevel,
+			 11, NULL, wl_proxy_get_version((struct wl_proxy *) xdg_toplevel), 0, wl_output);
+}
+
+static inline void
+xdg_toplevel_unset_fullscreen(struct xdg_toplevel *xdg_toplevel)
+{
+	wl_proxy_marshal_flags((struct wl_proxy *) xdg_toplevel,
+			 12, NULL, wl_proxy_get_version((struct wl_proxy *) xdg_toplevel), 0, NULL);
+}
+
 extern const struct wl_interface wl_output_interface;
 extern const struct wl_interface wl_seat_interface;
 extern const struct wl_interface wl_surface_interface;
@@ -1205,6 +1225,7 @@ typedef struct
 {
     struct wl_display* Display;
     struct wl_registry* Registry;
+    struct wl_output* Output;
     struct wl_compositor* Compositor;
     struct xdg_wm_base* XdgWmBase;
     struct wl_surface* Surface;
@@ -1224,6 +1245,7 @@ typedef struct
     tr_u32 TopLevelW, TopLevelH;
     tr_u32 WindowW, WindowH;
     tr_b32 Quit;
+    tr_b32 IsFullscreen;
 
     tr_b32 IsDown[TR_BUTTON_MAX];
     tr_b32 WasDown[TR_BUTTON_MAX];
@@ -1265,6 +1287,10 @@ tr_func void trLinuxWaylandRegistryGlobal(
     else if (trLinuxWaylandMatchString(InterfaceData, xdg_wm_base_interface.name))
     {
         trWayland.XdgWmBase = wl_registry_bind(Registry, Name, &xdg_wm_base_interface, Version);
+    }
+    else if (trLinuxWaylandMatchString(InterfaceData, wl_output_interface.name))
+    {
+        trWayland.Output = wl_registry_bind(Registry, Name, &wl_output_interface, Version);
     }
 }
 
@@ -1569,6 +1595,7 @@ tr_func void trLinuxWaylandKeyboardKey(
         case XKB_KEY_space: Button = TR_BUTTON_KEY_SPACE; break;
         case XKB_KEY_Left:  Button = TR_BUTTON_KEY_LEFT; break;
         case XKB_KEY_Right: Button = TR_BUTTON_KEY_RIGHT; break;
+        case XKB_KEY_F11:   Button = TR_BUTTON_KEY_F11; break;
     }
 
     if (Button != TR_BUTTON_NIL)
@@ -1744,6 +1771,19 @@ tr_func void trLinuxWaylandPollEvents(void)
 tr_func void trLinuxWaylandPresent(void)
 {
     wl_surface_commit(trWayland.Surface);
+}
+
+tr_func void trLinuxWaylandToggleFullscreen(void)
+{
+    if (!trWayland.Output)
+        return;
+
+    if (!trWayland.IsFullscreen)
+        xdg_toplevel_set_fullscreen(trWayland.XdgTopLevel, trWayland.Output);
+    else
+        xdg_toplevel_unset_fullscreen(trWayland.XdgTopLevel);
+
+    trWayland.IsFullscreen = !trWayland.IsFullscreen;
 }
 
 tr_func tr_u32 trLinuxWaylandGetWindowWidth(void)

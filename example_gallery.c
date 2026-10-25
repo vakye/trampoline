@@ -22,6 +22,10 @@ static tr_u32 CurrentEntryIndex = 0;
 
 void Setup(void)
 {
+    // NOTE(vak): Toggle fullscreen to fully appreciate art :)
+
+    trToggleFullscreen();
+
     // NOTE(vak): Setup gallery entries
 
     for (tr_usize Index = 0; Index < TR_ARRAY_COUNT(Entries); Index++)
@@ -61,6 +65,9 @@ void Frame(tr_f32 LastFrameTime)
     trSetClearColor(0.0f, 0.0f, 0.0f, 0.25f);
 
     gallery_entry* Entry = Entries + CurrentEntryIndex;
+
+    if (trIsButtonPressed(TR_BUTTON_KEY_F11))
+        trToggleFullscreen();
 
     if (trIsButtonPressed(TR_BUTTON_KEY_LEFT))
     {
