@@ -3811,9 +3811,6 @@ tr_func void trCircle2D(
         tr_f32 C = trCosF32(T);
         tr_f32 S = trSinF32(T);
 
-        tr_f32 U = 0.5f - 0.5f*C;
-        tr_f32 V = 0.5f + 0.5f*S;
-
         tr_f32 X = CenterX - Radius*C;
         tr_f32 Y = CenterY + Radius*S;
 
