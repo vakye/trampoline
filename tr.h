@@ -194,6 +194,7 @@ tr_func tr_arena* trGetTemporaryArena(void);
 tr_func tr_b32 trMakeArena(tr_arena* Arena, tr_usize MinCommited, tr_usize MinReserved);
 tr_func void trResetArena(tr_arena* Arena);
 
+tr_func void* trGetArenaBase(tr_arena* Arena);
 tr_func tr_usize trGetArenaPosition(tr_arena* Arena);
 tr_func void trSetArenaPosition(tr_arena* Arena, tr_usize Position);
 
@@ -424,46 +425,6 @@ tr_func void trText2D(
     tr_f32 X, tr_f32 Y,
     tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A
 );
-
-/////////////////////////////////////////////////
-// NOTE(vak): Stream reader
-/////////////////////////////////////////////////
-
-typedef struct tr_reader_chunk tr_reader_chunk;
-struct tr_reader_chunk
-{
-    void* Data;
-    tr_usize Size;
-    tr_reader_chunk* Next;
-};
-
-typedef struct
-{
-    tr_u8* At;
-    tr_usize Remaining;
-
-    tr_reader_chunk* FirstChunk;
-    tr_reader_chunk* LastChunk;
-} tr_reader;
-
-tr_func tr_reader trMakeReader(void* Data, tr_usize Size);
-tr_func void* trReaderConsumeSize(tr_reader* Reader, tr_usize Size);
-tr_func tr_b32 trReaderConsumeToBuffer(tr_reader* Reader, tr_usize Size, void* Buffer);
-tr_func tr_b32 trReaderAddChunk(tr_reader* Reader, tr_arena* Arena, void* Data, tr_usize Size);
-
-#define trReaderConsumeInto(Reader, Pointer) trReaderConsumeToBuffer(Reader, sizeof(*(Pointer)), Pointer)
-
-typedef struct
-{
-    tr_reader* Reader;
-    tr_u64 BitBuffer;
-    tr_usize BitCount;
-} tr_bit_reader;
-
-tr_func tr_bit_reader trMakeBitReader(tr_reader* Reader);
-tr_func tr_b32 trBitReaderConsume(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount);
-tr_func tr_b32 trBitReaderPeek(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount);
-tr_func tr_b32 trBitReaderAdvance(tr_bit_reader* BitReader, tr_usize BitCount);
 
 /////////////////////////////////////////////////
 // NOTE(vak): PNG

@@ -137,6 +137,12 @@ tr_func void trResetArena(tr_arena* Arena)
     trSetArenaPosition(Arena, 0);
 }
 
+tr_func void* trGetArenaBase(tr_arena* Arena)
+{
+    void* Result = Arena->Base;
+    return (Result);
+}
+
 tr_func tr_usize trGetArenaPosition(tr_arena* Arena)
 {
     tr_usize Result = Arena->Used;
@@ -4303,190 +4309,112 @@ tr_func void trVulkanEndFrame(void)
 }
 
 /////////////////////////////////////////////////
-// NOTE(vak): Bytestream reader
+// NOTE(vak): PNG
 /////////////////////////////////////////////////
 
-tr_func tr_reader trMakeReader(void* Data, tr_usize Size)
+// NOTE(vak): !!! These ZLib functions don't actually do any
+// ZLib decoding. I just accidentally named them like that and,
+// now I don't know a better name that is also short and nice
+// to type like ZLib... !!!
+
+// TODO(vak): Maybe rename this to bit_buffer or something...
+
+typedef struct
 {
-    tr_reader Reader =
+    tr_u8* At;
+    tr_u64 Remaining;
+    tr_u64 BitBuffer;
+    tr_u64 BitCount;
+    tr_b32 Error; // NOTE(vak): Some kind of error has occured when reading bits
+} tr_zlib;
+
+tr_func tr_zlib trSetupZLib(tr_u8* Data, tr_u64 BytesRemaining)
+{
+    tr_zlib ZLib =
     {
-        .At = (tr_u8*)Data,
-        .Remaining = Size,
+        .At = Data,
+        .Remaining = BytesRemaining,
     };
 
-    return (Reader);
+    return (ZLib);
 }
 
-tr_func void trReaderTryNextChunk(tr_reader* Reader)
+tr_func void trZLibRefillBits(tr_zlib* ZLib)
 {
-    if (Reader->Remaining == 0)
+    if (ZLib->Remaining >= 8) // NOTE(vak): This branch should be taken most of the time
     {
-        if (Reader->FirstChunk)
+        tr_u32 BytesToEat = (64 - ZLib->BitCount) / 8;
+        tr_u64 Value = *(tr_u64*)ZLib->At;
+
+        ZLib->BitBuffer |= Value << ZLib->BitCount;
+        ZLib->BitCount += BytesToEat*8;
+
+        ZLib->At += BytesToEat;
+        ZLib->Remaining -= BytesToEat;
+    }
+    else
+    {
+        tr_u32 BytesToEat = TR_MIN(ZLib->Remaining, (64 - ZLib->BitCount) / 8);
+
+        for (tr_u32 I = 0; I < BytesToEat; I++)
         {
-            tr_reader_chunk* Chunk = Reader->FirstChunk;
+            tr_u64 Byte = (tr_u64)ZLib->At[0];
 
-            Reader->At = Chunk->Data;
-            Reader->Remaining = Chunk->Size;
+            ZLib->BitBuffer |= Byte << ZLib->BitCount;
+            ZLib->BitCount += 8;
 
-            Reader->FirstChunk = Chunk->Next;
-        }
-
-        if (!Reader->FirstChunk)
-        {
-            Reader->FirstChunk = 0;
-            Reader->LastChunk = 0;
+            ZLib->At++;
+            ZLib->Remaining--;
         }
     }
 }
 
-tr_func void* trReaderConsumeSize(tr_reader* Reader, tr_usize Size)
+tr_func tr_u32 trZLibPeekBits(tr_zlib* ZLib, tr_u32 BitCount)
 {
-    trReaderTryNextChunk(Reader);
+    if (BitCount > 32)
+    {
+        ZLib->Error = TR_TRUE;
+        return (0);
+    }
 
-    TR_ASSERT(Size <= Reader->Remaining);
+    if (ZLib->BitCount < BitCount)
+        trZLibRefillBits(ZLib);
 
-    void* Result = Reader->At;
+    tr_u32 Result = ZLib->BitBuffer & ((1ull << BitCount) - 1);
+    return (Result);
+}
 
-    Reader->At += Size;
-    Reader->Remaining -= Size;
+tr_func void trZLibAdvanceBits(tr_zlib* ZLib, tr_u32 BitCount)
+{
+    if (ZLib->BitCount < BitCount)
+    {
+        ZLib->Error = TR_TRUE;
+        return;
+    }
+
+    ZLib->BitBuffer >>= BitCount;
+    ZLib->BitCount -= BitCount;
+}
+
+tr_func tr_u32 trZLibConsumeBits(tr_zlib* ZLib, tr_u32 BitCount)
+{
+    tr_u32 Result = trZLibPeekBits(ZLib, BitCount);
+
+    trZLibAdvanceBits(ZLib, BitCount);
 
     return (Result);
 }
 
-tr_func tr_b32 trReaderConsumeToBuffer(tr_reader* Reader, tr_usize Size, void* Buffer)
+tr_func void trZLibFlushByteBoundary(tr_zlib* ZLib)
 {
-    trReaderTryNextChunk(Reader);
+    tr_usize Stepback = (ZLib->BitCount & 0x07) / 8;
 
-    if (Reader->Remaining < Size)
-        return (TR_FALSE);
+    ZLib->At -= Stepback;
+    ZLib->Remaining += Stepback;
 
-    void* ConsumedAt = trReaderConsumeSize(Reader, Size);
-    trCopyMemory(Buffer, ConsumedAt, Size);
-
-    return (TR_TRUE);
+    ZLib->BitBuffer = 0;
+    ZLib->BitCount = 0;
 }
-
-tr_func tr_b32 trReaderAddChunk(tr_reader* Reader, tr_arena* Arena, void* Data, tr_usize Size)
-{
-    tr_b32 ParametersOkay = (Reader && Arena && Data && Size);
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
-    tr_reader_chunk* Chunk = trPushArenaTypeZero(Arena, tr_reader_chunk);
-
-    if (!Chunk)
-        return (TR_FALSE);
-
-    Chunk->Data = Data;
-    Chunk->Size = Size;
-
-    if (!Reader->FirstChunk || !Reader->LastChunk)
-    {
-        Reader->FirstChunk = Chunk;
-        Reader->LastChunk = Chunk;
-    }
-    else
-    {
-        Reader->LastChunk->Next = Chunk;
-        Reader->LastChunk = Chunk;
-    }
-
-    return (TR_TRUE);
-}
-
-tr_func tr_bit_reader trMakeBitReader(tr_reader* Reader)
-{
-    TR_ASSERT(Reader);
-
-    tr_bit_reader BitReader =
-    {
-        .Reader = Reader,
-        .BitBuffer = 0,
-        .BitCount = 0,
-    };
-
-    return (BitReader);
-}
-
-tr_func tr_b32 trBitReaderConsume(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount)
-{
-    tr_b32 PeekOkay = trBitReaderPeek(BitReader, Buffer, BitCount);
-    tr_b32 AdvanceOkay = TR_FALSE;
-
-    if (PeekOkay)
-        AdvanceOkay = trBitReaderAdvance(BitReader, BitCount);
-
-    tr_b32 Okay = PeekOkay && AdvanceOkay;
-
-    return (Okay);
-}
-
-tr_func tr_b32 trBitReaderPeek(tr_bit_reader* BitReader, tr_u32* Buffer, tr_usize BitCount)
-{
-    tr_b32 ParametersOkay = (BitReader && Buffer && (BitCount <= 32));
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
-    tr_reader* BackingReader = BitReader->Reader;
-
-    while (BitReader->BitCount < BitCount)
-    {
-        tr_u8 Byte = 0;
-
-        if (!trReaderConsumeInto(BackingReader, &Byte)) return (TR_FALSE);
-
-        BitReader->BitBuffer |= (tr_u64)Byte << BitReader->BitCount;
-        BitReader->BitCount += 8;
-    }
-
-    tr_u64 Mask = (((tr_usize)1) << BitCount) - 1;
-
-    *Buffer = (tr_u32)(BitReader->BitBuffer & Mask);
-
-    return (TR_TRUE);
-}
-
-tr_func tr_b32 trBitReaderAdvance(tr_bit_reader* BitReader, tr_usize BitCount)
-{
-    tr_b32 ParametersOkay = (BitReader && (BitCount <= 32));
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
-    tr_b32 Okay = (BitCount <= BitReader->BitCount);
-    if (Okay)
-    {
-        BitReader->BitBuffer >>= BitCount;
-        BitReader->BitCount -= BitCount;
-    }
-
-    return (Okay);
-}
-
-/////////////////////////////////////////////////
-// NOTE(vak): PNG
-/////////////////////////////////////////////////
-
-typedef struct __attribute__((packed))
-{
-    tr_u32 Length;
-    tr_u32 ChunkType;
-} tr_png_chunk_header;
-
-typedef struct __attribute__((packed))
-{
-    tr_u32 CRC;
-} tr_png_chunk_footer;
-
-typedef struct __attribute__((packed))
-{
-    tr_u32 Width;
-    tr_u32 Height;
-    tr_u8  BitDepth;
-    tr_u8  ColorType;
-    tr_u8  CompressionMethod;
-    tr_u8  FilterMethod;
-    tr_u8  InterlaceMethod;
-} tr_png_ihdr;
 
 typedef struct
 {
@@ -4504,10 +4432,6 @@ typedef struct
 
 tr_func tr_b32 trAllocateHuffmanPNG(tr_png_huffman* Huffman, tr_arena* Arena, tr_usize BitCount)
 {
-    tr_b32 ParametersOkay = (Huffman && Arena && ((BitCount > 0) && (BitCount <= 15)));
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
     Huffman->BitCount = BitCount;
 
     tr_usize EntryCount = ((tr_usize)1) << BitCount;
@@ -4530,10 +4454,6 @@ tr_func tr_b32 trBuildHuffmanPNG(
     tr_u32 SymbolCount
 )
 {
-    tr_b32 ParametersOkay = (Huffman && SymbolCodeLengths && ((SymbolCount > 0) && (SymbolCount <= 288)));
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
     // NOTE(vak): Zero everything
     {
         tr_usize EntryCount = ((tr_usize)1) << Huffman->BitCount;
@@ -4580,44 +4500,33 @@ tr_func tr_b32 trBuildHuffmanPNG(
         BaseEntryIndex = ((BaseEntryIndex & 0xFF00) >> 8) | ((BaseEntryIndex & 0x00FF) << 8);
         BaseEntryIndex >>= (16 - Huffman->BitCount);
 
+        tr_png_huffman_entry* Entry = Huffman->Entries + BaseEntryIndex;
+
         for (tr_u32 EntryIndex = 0; EntryIndex < EntryCount; EntryIndex++)
         {
-            tr_png_huffman_entry* Entry = Huffman->Entries + BaseEntryIndex + (EntryIndex << CodeLength);
-
-            // NOTE(vak): Something is wrong if we're overwriting entries...
-            if (Entry->BitCount > 0)
-                return (TR_FALSE);
-
             Entry->Value = Symbol;
             Entry->BitCount = (tr_u16)CodeLength;
+
+            Entry += (1 << CodeLength);
         }
     }
 
     return (TR_TRUE);
 }
 
-tr_func tr_b32 trDecodeHuffmanPNG(
+tr_func tr_u32 trDecodeHuffmanPNG(
     tr_png_huffman* Huffman,
-    tr_bit_reader* BitReader,
-    tr_u32* Buffer
+    tr_zlib* ZLib
 )
 {
-    tr_b32 ParametersOkay = (Huffman && BitReader && Buffer);
-    if (!ParametersOkay)
-        return (TR_FALSE);
-
-    tr_u32 Bits = 0;
-
-    if (!trBitReaderPeek(BitReader, &Bits, Huffman->BitCount)) return (TR_FALSE);
+    tr_u32 Bits = trZLibPeekBits(ZLib, Huffman->BitCount);
 
     tr_png_huffman_entry* Entry = Huffman->Entries + Bits;
-    if (!Entry->BitCount) return (TR_FALSE);
+    TR_ASSERT(Entry->BitCount);
 
-    *Buffer = (tr_u32)Entry->Value;
+    trZLibAdvanceBits(ZLib, Entry->BitCount);
 
-    if (!trBitReaderAdvance(BitReader, Entry->BitCount)) return (TR_FALSE);
-
-    return (TR_TRUE);
+    return (Entry->Value);
 }
 
 tr_func tr_b32 trDecodePNG(
@@ -4640,55 +4549,69 @@ tr_func tr_b32 trDecodePNG(
 
     trZeroType(Decoded);
 
-    tr_reader DataReader = {0}; // NOTE(vak): Linked list of IDAT chunks
     tr_usize ResetArenaTo = InitialArenaPosition; // NOTE(vak): Position to reset arena to after the decoder is finished
+    tr_usize BitDepth = 0;
 
-    tr_usize BytesPerChannel = 0;
+    tr_u8* ZLibData = 0;
+    tr_usize ZLibSize = 0;
 
     // NOTE(vak): Signature and chunks
     {
-        tr_reader Reader = trMakeReader(Data, DataSize);
+        tr_u8* ReadAt = Data;
+        tr_usize ReadRemaining = DataSize;
 
-        tr_u64 Signature = 0;
+        TR_PNG_CHECK(ReadRemaining >= 8);
 
-        TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Signature));
+        tr_u64 Signature = *(tr_u64*)ReadAt;
         TR_PNG_CHECK(Signature == 0x0A1A0A0D474E5089);
+
+        ReadAt += 8;
+        ReadRemaining -= 8;
 
         tr_b32 EncounteredIHDR = TR_FALSE;
         tr_b32 EncounteredIEND = TR_FALSE;
         tr_u32 ChunkIndex = 0; // NOTE(vak): To check if IHDR is the first chunk
 
-        while (Reader.Remaining && !EncounteredIEND)
+        while (ReadRemaining && !EncounteredIEND)
         {
-            tr_png_chunk_header Header = {0};
-            tr_png_chunk_footer Footer = {0};
+            TR_PNG_CHECK(ReadRemaining >= 8);
 
-            TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Header));
+            tr_u32 ChunkLength = trBigToHostEndian32(*(tr_u32*)(ReadAt + 0));
+            tr_u32 ChunkType   = *(tr_u32*)(ReadAt + 4);
 
-            tr_u32 ChunkLength = trBigToHostEndian32(Header.Length);
-            TR_PNG_CHECK(ChunkLength <= Reader.Remaining);
+            ReadAt += 8;
+            ReadRemaining -= 8;
 
-            void* ChunkData = trReaderConsumeSize(&Reader, ChunkLength);
+            TR_PNG_CHECK(ChunkLength + 4 <= ReadRemaining);
 
-            TR_PNG_CHECK(trReaderConsumeInto(&Reader, &Footer));
+            tr_u8* ChunkData = ReadAt;
+            ReadAt += ChunkLength;
+            ReadRemaining -= ChunkLength;
 
-            switch (Header.ChunkType)
+            tr_u32 CRC = *(tr_u32*)ReadAt;
+            ReadAt += 4;
+            ReadRemaining -= 4;
+
+            switch (ChunkType)
             {
                 default: break;
 
                 case 0x52444849: // NOTE(vak): IHDR
                 {
                     TR_PNG_CHECK(ChunkIndex == 0);
-                    TR_PNG_CHECK(ChunkLength == sizeof(tr_png_ihdr));
+                    TR_PNG_CHECK(ChunkLength == 13);
                     TR_PNG_CHECK(!EncounteredIHDR);
 
-                    tr_png_ihdr* IHDR = (tr_png_ihdr*)ChunkData;
+                    Decoded->Width = trBigToHostEndian32(*(tr_u32*)(ChunkData + 0));
+                    Decoded->Height = trBigToHostEndian32(*(tr_u32*)(ChunkData + 4));
+                    BitDepth = ChunkData[8];
 
-                    Decoded->Width = trBigToHostEndian32(IHDR->Width);
-                    Decoded->Height = trBigToHostEndian32(IHDR->Height);
-                    BytesPerChannel = IHDR->BitDepth / 8; // NOTE(vak): We only do 8, 16 bit depth so this is okay
+                    tr_u8 ColorType = ChunkData[9];
+                    tr_u8 CompressionMethod = ChunkData[10];
+                    tr_u8 FilterMethod = ChunkData[11];
+                    tr_u8 InterlaceMethod = ChunkData[12];
 
-                    switch (IHDR->ColorType)
+                    switch (ColorType)
                     {
                         default: Decoded->Channels = 0;
 
@@ -4701,18 +4624,13 @@ tr_func tr_b32 trDecodePNG(
                     tr_b32 IsValid = TR_TRUE;
 
                     IsValid &= (Decoded->Width != 0) && (Decoded->Height != 0);
-                    IsValid &= (IHDR->BitDepth == 8) || (IHDR->BitDepth == 16);
+                    IsValid &= (BitDepth == 8) || (BitDepth == 16);
                     IsValid &= (Decoded->Channels != 0);
-                    IsValid &= (IHDR->CompressionMethod == 0);
-                    IsValid &= (IHDR->FilterMethod == 0);
-                    IsValid &= (IHDR->InterlaceMethod == 0);
+                    IsValid &= (CompressionMethod == 0);
+                    IsValid &= (FilterMethod == 0);
+                    IsValid &= (InterlaceMethod == 0);
 
                     TR_PNG_CHECK(IsValid);
-
-                    // NOTE(vak): Allocate memory for image, and set the arena
-                    // reset position. Every single arena allocation made after
-                    // the main image allocation is treated as temporary working
-                    // memory for the decoder, and will be resetted at the end.
 
                     // NOTE(vak): Decoded->Pixels will always be in RGBA8 format
 
@@ -4725,19 +4643,25 @@ tr_func tr_b32 trDecodePNG(
 
                     ResetArenaTo = trGetArenaPosition(Arena);
 
+                    // NOTE(vak): ZLIB data area follows right after image memory
+
+                    ZLibData = (tr_u8*)trGetArenaBase(Arena) + trGetArenaPosition(Arena);
+
                     EncounteredIHDR = TR_TRUE;
                 } break;
 
                 case 0x54414449: // NOTE(vak): IDAT
                 {
-                    // NOTE(vak): Uses the arena to allocate tr_reader_chunk.
-                    // The PNG spec enforces IHDR to be placed before IDAT, so
-                    // the arena allocation should be made right after the main
-                    // image allocation. Thus, it can be resetted at the end later,
-                    // so this code is fine.
-
                     TR_PNG_CHECK(EncounteredIHDR);
-                    TR_PNG_CHECK(trReaderAddChunk(&DataReader, Arena, ChunkData, ChunkLength));
+
+                    // NOTE(vak): Copy IDAT chunks into ZLIB data area allocated on
+                    // the arena. Arena allocations are guaranteed to be contiguous
+                    // so it is okay to use it like a dynamic byte array here.
+
+                    trPushArenaZero(Arena, ChunkLength);
+
+                    trCopyMemory(ZLibData + ZLibSize, ChunkData, ChunkLength);
+                    ZLibSize += ChunkLength;
                 } break;
 
                 case 0x444e4549: // NOTE(vak): IEND
@@ -4753,15 +4677,14 @@ tr_func tr_b32 trDecodePNG(
         TR_PNG_CHECK(EncounteredIEND);
     }
 
-    TR_PNG_CHECK((BytesPerChannel == 1) || (BytesPerChannel == 2));
-    TR_PNG_CHECK(DataReader.FirstChunk);
+    TR_PNG_CHECK(ZLibData && ZLibSize);
 
-    tr_usize DecompressedRowSize = 1 + Decoded->Width * Decoded->Channels * BytesPerChannel;
+    tr_usize DecompressedRowSize = 1 + (Decoded->Width * Decoded->Channels * BitDepth + 7) / 8;
     tr_usize DecompressedSize = DecompressedRowSize * Decoded->Height;
 
     tr_u8* DecompressedBytes = trPushArenaZero(
         Arena,
-        DecompressedSize
+        TR_ALIGN_UP(DecompressedSize+8, 8) // NOTE(vak): We can copy more than we need when we do chunked 8 byte copies so account for that
     );
 
     TR_PNG_CHECK(DecompressedBytes);
@@ -4773,11 +4696,15 @@ tr_func tr_b32 trDecodePNG(
         // NOTE(vak): ZLIB Compressed Data Format
         // https://www.rfc-editor.org/info/rfc1950/
 
-        tr_u8 CMF = 0;
-        tr_u8 FLG = 0;
+        tr_zlib ZLib = trSetupZLib(ZLibData, ZLibSize);
 
-        TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &CMF));
-        TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &FLG));
+        TR_PNG_CHECK(ZLib.Remaining >= 2);
+
+        tr_u8 CMF = ZLib.At[0];
+        tr_u8 FLG = ZLib.At[1];
+
+        ZLib.At += 2;
+        ZLib.Remaining -= 2;
 
         tr_u8 CM     = (CMF & 0x0F);
         tr_u8 CINFO  = (CMF >> 4) & 0x0F;
@@ -4800,8 +4727,6 @@ tr_func tr_b32 trDecodePNG(
         // NOTE(vak): DEFLATE Compressed Data Format
         // https://www.rfc-editor.org/info/rfc1951/
 
-        tr_bit_reader BitReader = trMakeBitReader(&DataReader);
-
         tr_u32 BFINAL = 0;
         tr_u32 BTYPE  = 0;
 
@@ -4813,56 +4738,44 @@ tr_func tr_b32 trDecodePNG(
         TR_PNG_CHECK(trAllocateHuffmanPNG(&HuffmanLitLen, Arena, 15));
         TR_PNG_CHECK(trAllocateHuffmanPNG(&HuffmanDist, Arena, 15));
 
-        do
+        while (!BFINAL && !ZLib.Error)
         {
-            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BFINAL, 1));
-            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &BTYPE,  2));
+            BFINAL = trZLibConsumeBits(&ZLib, 1);
+            BTYPE  = trZLibConsumeBits(&ZLib, 2);
+
             TR_PNG_CHECK(BTYPE <= 0x02);
 
             if (BTYPE == 0x00)
             {
                 // NOTE(vak): Uncompressed
 
-                // NOTE(vak): We're reading in a bytestream, so reset bit reader
-                // since it isn't needed here.
-                BitReader.BitBuffer = 0;
-                BitReader.BitCount  = 0;
+                trZLibFlushByteBoundary(&ZLib);
 
-                tr_u16 LEN  = 0;
-                tr_u16 NLEN = 0;
+                TR_PNG_CHECK(ZLib.Remaining >= 4);
 
-                TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &LEN));
-                TR_PNG_CHECK(trReaderConsumeInto(&DataReader, &NLEN));
+                tr_u16 LEN  = *(tr_u16*)(ZLib.At + 0);
+                tr_u16 NLEN = *(tr_u16*)(ZLib.At + 2);
+
+                ZLib.At += 2;
+                ZLib.Remaining -= 2;
 
                 TR_PNG_CHECK((tr_u16)(~LEN) == (tr_u16)(NLEN));
+                TR_PNG_CHECK(ZLib.Remaining >= LEN);
 
-                tr_usize Remaining = LEN;
+                void* UncompressedData = ZLib.At;
 
-                while (Remaining)
-                {
-                    // NOTE(vak): Go to next chunk if nothing remains
-                    if (DataReader.Remaining == 0)
-                        trReaderTryNextChunk(&DataReader);
+                ZLib.At += LEN;
+                ZLib.Remaining -= LEN;
 
-                    // NOTE(vak): Last chunk now...
-                    if (!DataReader.FirstChunk)
-                        TR_PNG_CHECK(DataReader.Remaining >= Remaining);
+                TR_PNG_CHECK(DecompressedOffset + LEN <= DecompressedSize);
 
-                    tr_usize ConsumeSize = TR_MIN(DataReader.Remaining, Remaining);
+                trCopyMemory(
+                    DecompressedBytes + DecompressedOffset,
+                    UncompressedData,
+                    LEN
+                );
 
-                    void* UncompressedData = trReaderConsumeSize(&DataReader, ConsumeSize);
-
-                    TR_PNG_CHECK(DecompressedOffset + ConsumeSize <= DecompressedSize);
-
-                    trCopyMemory(
-                        DecompressedBytes + DecompressedOffset,
-                        UncompressedData,
-                        ConsumeSize
-                    );
-
-                    DecompressedOffset += ConsumeSize;
-                    Remaining -= ConsumeSize;
-                }
+                DecompressedOffset += LEN;
             }
             else if ((BTYPE == 0x01) || (BTYPE == 0x02))
             {
@@ -4877,13 +4790,9 @@ tr_func tr_b32 trDecodePNG(
 
                     tr_u32 HCLEN = 0;
 
-                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HLIT,  5));
-                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HDIST, 5));
-                    TR_PNG_CHECK(trBitReaderConsume(&BitReader, &HCLEN, 4));
-
-                    HLIT  += 257;
-                    HDIST += 1;
-                    HCLEN += 4;
+                    HLIT  = 257 + trZLibConsumeBits(&ZLib, 5);
+                    HDIST = 1   + trZLibConsumeBits(&ZLib, 5);
+                    HCLEN = 4   + trZLibConsumeBits(&ZLib, 4);
 
                     // NOTE(vak): 286, 287 don't appear in the actual data so the dynamic
                     // huffman code compression shouldn't emit them
@@ -4891,17 +4800,11 @@ tr_func tr_b32 trDecodePNG(
 
                     // NOTE(vak): Code lengths for code lengths... (literally)
 
-                    static tr_u32 Swizzle[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+                    static tr_u32 Swizzle[19] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
                     tr_u32 CodeLengthsForCLEN[19] = {0};
 
                     for (tr_u32 Index = 0; Index < HCLEN; Index++)
-                    {
-                        TR_PNG_CHECK(trBitReaderConsume(
-                            &BitReader,
-                            &CodeLengthsForCLEN[Swizzle[Index]],
-                            3
-                        ));
-                    }
+                        CodeLengthsForCLEN[Swizzle[Index]] = trZLibConsumeBits(&ZLib, 3);
 
                     TR_PNG_CHECK(trBuildHuffmanPNG(&HuffmanCLEN, CodeLengthsForCLEN, 19));
 
@@ -4910,11 +4813,9 @@ tr_func tr_b32 trDecodePNG(
 
                     tr_u32 CodeLengthCount = 0;
 
-                    while (CodeLengthCount < HLIT+HDIST)
+                    while ((CodeLengthCount < HLIT+HDIST) && (!ZLib.Error))
                     {
-                        tr_u32 Symbol = 0;
-
-                        TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanCLEN, &BitReader, &Symbol));
+                        tr_u32 Symbol = trDecodeHuffmanPNG(&HuffmanCLEN, &ZLib);
                         TR_PNG_CHECK(Symbol <= 18);
 
                         tr_u32 RepeatValue = 0;
@@ -4926,27 +4827,18 @@ tr_func tr_b32 trDecodePNG(
                         }
                         else if (Symbol <= 16)
                         {
-                            if (CodeLengthCount == 0) return (TR_FALSE);
-
-                            tr_u32 Repeat = 0;
-                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 2));
+                            TR_PNG_CHECK(CodeLengthCount > 0);
 
                             RepeatValue = CodeLengths[CodeLengthCount - 1];
-                            RepeatCount = 3 + Repeat;
+                            RepeatCount = 3 + trZLibConsumeBits(&ZLib, 2);
                         }
                         else if (Symbol <= 17)
                         {
-                            tr_u32 Repeat = 0;
-                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 3));
-
-                            RepeatCount = 3 + Repeat;
+                            RepeatCount = 3 + trZLibConsumeBits(&ZLib, 3);
                         }
                         else if (Symbol <= 18)
                         {
-                            tr_u32 Repeat = 0;
-                            TR_PNG_CHECK(trBitReaderConsume(&BitReader, &Repeat, 7));
-
-                            RepeatCount = 11 + Repeat;
+                            RepeatCount = 11 + trZLibConsumeBits(&ZLib, 7);
                         }
 
                         TR_PNG_CHECK(CodeLengthCount + RepeatCount <= HLIT+HDIST);
@@ -5000,11 +4892,9 @@ tr_func tr_b32 trDecodePNG(
 
                 // NOTE(vak): Start decoding
 
-                for (;;)
+                while (!ZLib.Error)
                 {
-                    tr_u32 Symbol = 0;
-
-                    TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanLitLen, &BitReader, &Symbol));
+                    tr_u32 Symbol = trDecodeHuffmanPNG(&HuffmanLitLen, &ZLib);
                     TR_PNG_CHECK(Symbol <= 285);
 
                     if (Symbol <= 255)
@@ -5018,10 +4908,6 @@ tr_func tr_b32 trDecodePNG(
                     }
                     else if (Symbol <= 285)
                     {
-                        // NOTE(vak): xxxEncodings[xx]:
-                        //      [0]: Extra bits
-                        //      [1]: Base value
-
                         static tr_u32 LengthEncodings[29][2] =
                         {
                             {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7},
@@ -5046,21 +4932,13 @@ tr_func tr_b32 trDecodePNG(
                         tr_u32 LengthExtraBits = LengthEncodings[LengthIndex][0];
                         tr_u32 Length = LengthEncodings[LengthIndex][1];
 
-                        tr_u32 AdditionalLength = 0;
-                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &AdditionalLength, LengthExtraBits));
-                        Length += AdditionalLength;
+                        Length += trZLibConsumeBits(&ZLib, LengthExtraBits);
 
-                        tr_u32 DistanceIndex = 0;
-
-                        TR_PNG_CHECK(trDecodeHuffmanPNG(&HuffmanDist, &BitReader, &DistanceIndex));
-                        TR_PNG_CHECK(DistanceIndex <= 29);
-
+                        tr_u32 DistanceIndex = trDecodeHuffmanPNG(&HuffmanDist, &ZLib);
                         tr_u32 DistanceExtraBits = DistanceEncodings[DistanceIndex][0];
                         tr_u32 Distance = DistanceEncodings[DistanceIndex][1];
 
-                        tr_u32 AdditionalDistance = 0;
-                        TR_PNG_CHECK(trBitReaderConsume(&BitReader, &AdditionalDistance, DistanceExtraBits));
-                        Distance += AdditionalDistance;
+                        Distance += trZLibConsumeBits(&ZLib, DistanceExtraBits);
 
                         TR_PNG_CHECK((Length > 0) && (Length <= 258));
                         TR_PNG_CHECK((Distance > 0) && (Distance <= 32768));
@@ -5071,14 +4949,25 @@ tr_func tr_b32 trDecodePNG(
                         tr_u8* Source = DecompressedBytes + DecompressedOffset - Distance;
                         tr_u8* Dest = DecompressedBytes + DecompressedOffset;
 
-                        for (tr_u32 Index = 0; Index < Length; Index++)
-                            *Dest++ = *Source++;
+                        tr_u32 Index = 0;
+
+                        if (Distance >= 8)
+                        {
+                            // NOTE(vak): It is okay to copy past the "end of buffer" here
+                            // since we allocated 8 more bytes at the end.
+
+                            for (; Index < Length; Index += 8)
+                                *(tr_u64*)&Dest[Index] = *(tr_u64*)&Source[Index];
+                        }
+
+                        for (; Index < Length; Index++)
+                            Dest[Index] = Source[Index];
 
                         DecompressedOffset += Length;
                     }
                 }
             }
-        } while (!BFINAL);
+        }
     }
 
     TR_PNG_CHECK(DecompressedOffset == DecompressedSize);
@@ -5095,167 +4984,105 @@ tr_func tr_b32 trDecodePNG(
         // If [A], [B], or [C] are outside of the image then they're treated
         // as zeroes.
 
-        TR_PNG_CHECK(Decoded->Channels <= 4);
-        TR_PNG_CHECK((BytesPerChannel == 1) || (BytesPerChannel == 2));
-
         tr_u32 Zero = 0;
+        tr_u32 FilterBytes = (BitDepth * Decoded->Channels) / 8;
 
-        tr_u32 LastRowAdvance = 0;
-        tr_u8* PrevDestRow = (tr_u8*)&Zero;
+        // NOTE(vak): Allocate two rows worth of memory so we can alternate
+        // between them during reconstruction
+
+        tr_u32 ReconstructedRowSize = (BitDepth * Decoded->Channels * Decoded->Width + 7) / 8;
+
+        tr_u8* RowBuffer = trPushArenaZero(
+            Arena,
+            2 * ReconstructedRowSize
+        );
 
         tr_u8* Dest = Decoded->Pixels;
         tr_u8* Source = DecompressedBytes;
 
         for (tr_usize Y = 0; Y < Decoded->Height; Y++)
         {
-            tr_u8* DestRow = Dest + (Y * Decoded->Width*Decoded->Channels);
-            tr_u8* SourceRow = Source + (Y * (1 + Decoded->Width*Decoded->Channels*BytesPerChannel));
-            tr_u8 Filter = *SourceRow++;
+            tr_u8* LastRow      = RowBuffer + (~Y & 1) * ReconstructedRowSize;
+            tr_u8* CurrentRow   = RowBuffer + ( Y & 1) * ReconstructedRowSize;
 
+            tr_u8 Filter = *Source++;
             TR_PNG_CHECK(Filter <= 4);
-
-            // NOTE(vak): This TR_PNG_SOURCE_OFFSET macro is a trick to make things work for
-            // both 8 bit-depth and 16 bit-depth.
-
-            // For 8 bit depth, we just take the byte as is, so the "BytesPerChannel"
-            // multiplication is just an identity (multiplication by 1).
-
-            // For 16 bit depth, we want to extract the higher 8-bit part (equivalent to
-            // division by 256), so we take the first byte in a channel since the encoding is big endian.
-            // This actually introduces inaccuracies as the more accurate thing to do would be to
-            // divide by 257 and round to the nearest integer. However, this is simpler, so
-            // I prefer doing it this way :)
-
-            #define TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel) \
-                ((BytesPerChannel) * (Channel))
 
             switch (Filter)
             {
                 case 0: // NOTE(vak): None
                 {
-                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
-                    {
-                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
-                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
-
-                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
-                        {
-                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
-
-                            Dest[Channel] = (tr_u8)(X[SourceOffset]);
-                        }
-                    }
+                    trCopyMemory(CurrentRow, Source, ReconstructedRowSize);
                 } break;
 
                 case 1: // NOTE(vak): Left
                 {
-                    tr_u8* X = SourceRow;
-                    tr_u8* A = (tr_u8*)&Zero;
+                    tr_usize I = 0;
 
-                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
-                    {
-                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
-                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
+                    for (; I < FilterBytes; I++)
+                        CurrentRow[I] = Source[I];
 
-                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
-                        {
-                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
-
-                            Dest[Channel] = (tr_u8)(X[SourceOffset] + A[Channel]);
-                        }
-
-                        A = Dest;
-                    }
+                    for (; I < ReconstructedRowSize; I++)
+                        CurrentRow[I] = Source[I] + CurrentRow[I - FilterBytes];
                 } break;
 
                 case 2: // NOTE(vak): Top
                 {
-                    tr_u8* X = SourceRow;
-                    tr_u8* B = PrevDestRow;
+                    tr_usize I = 0;
 
-                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
-                    {
-                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
-                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
-
-                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
-                        {
-                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
-
-                            Dest[Channel] = (tr_u8)(X[SourceOffset] + B[Channel]);
-                        }
-
-                        B += LastRowAdvance;
-                    }
+                    for (; I < ReconstructedRowSize; I++)
+                        CurrentRow[I] = Source[I] + LastRow[I];
                 } break;
 
                 case 3: // NOTE(vak): Average
                 {
-                    tr_u8* X = SourceRow;
-                    tr_u8* A = (tr_u8*)&Zero;
-                    tr_u8* B = PrevDestRow;
+                    tr_usize I = 0;
 
-                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
-                    {
-                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
-                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
+                    for (; I < FilterBytes; I++)
+                        CurrentRow[I] = Source[I] + (LastRow[I] >> 1);
 
-                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
-                        {
-                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
-
-                            Dest[Channel] = (tr_u8)(X[SourceOffset] + (A[Channel] + B[Channel]) / 2);
-                        }
-
-                        A = Dest;
-                        B += LastRowAdvance;
-                    }
+                    for (; I < ReconstructedRowSize; I++)
+                        CurrentRow[I] = Source[I] + ((CurrentRow[I - FilterBytes] + LastRow[I]) >> 1);
                 } break;
 
-                case 4: // NOTE(vak): Paeth Predictor
+                case 4: // NOTE(vak): Paeth
                 {
-                    tr_u8* X = SourceRow;
-                    tr_u8* A = (tr_u8*)&Zero;
-                    tr_u8* B = PrevDestRow;
-                    tr_u8* C = (tr_u8*)&Zero;
+                    tr_usize I = 0;
 
-                    for (tr_usize Index = 0; Index < Decoded->Width; Index++)
+                    for (; I < FilterBytes; I++)
+                        CurrentRow[I] = Source[I] + LastRow[I];
+
+                    for (; I < ReconstructedRowSize; I++)
                     {
-                        tr_u8* Dest = DestRow + Index * Decoded->Channels;
-                        tr_u8* X = SourceRow + Index * Decoded->Channels * BytesPerChannel;
+                        tr_s32 A = (tr_s32)CurrentRow[I - FilterBytes];
+                        tr_s32 B = (tr_s32)LastRow   [I];
+                        tr_s32 C = (tr_s32)LastRow   [I - FilterBytes];
 
-                        for (tr_usize Channel = 0; Channel < Decoded->Channels; Channel++)
-                        {
-                            tr_s32 VA = (tr_s32)A[Channel];
-                            tr_s32 VB = (tr_s32)B[Channel];
-                            tr_s32 VC = (tr_s32)C[Channel];
+                        tr_s32 T = C*3 - (A + B);
+                        tr_s32 L = TR_MIN(A, B);
+                        tr_s32 H = TR_MAX(A, B);
+                        tr_s32 T0 = (H <= T) ? (L) : (C);
+                        tr_s32 T1 = (T <= L) ? (H) : (T0);
 
-                            tr_s32 P = VA + VB - VC;
-                            tr_s32 PA = TR_ABS(P - VA);
-                            tr_s32 PB = TR_ABS(P - VB);
-                            tr_s32 PC = TR_ABS(P - VC);
-
-                            tr_u8 Predict = (tr_u8)VC;
-
-                            if ((PA <= PB) && (PA <= PC))
-                                Predict = (tr_u8)VA;
-                            else if (PB <= PC)
-                                Predict = (tr_u8)VB;
-
-                            tr_usize SourceOffset = TR_PNG_SOURCE_OFFSET(Channel, BytesPerChannel);
-
-                            Dest[Channel] = (tr_u8)(X[SourceOffset] + Predict);
-                        }
-
-                        A = Dest;
-                        C = B;
-                        B += LastRowAdvance;
+                        CurrentRow[I] = Source[I] + (tr_u8)T1;
                     }
                 } break;
             }
 
-            LastRowAdvance = Decoded->Channels;
-            PrevDestRow = DestRow;
+            if (BitDepth == 8)
+            {
+                trCopyMemory(Dest, CurrentRow, ReconstructedRowSize);
+            }
+            else if (BitDepth == 16)
+            {
+                for (tr_usize I = 0; I < Decoded->Width*Decoded->Channels; I++)
+                {
+                    Dest[I] = CurrentRow[I*2];
+                }
+            }
+
+            Dest += Decoded->Width * Decoded->Channels;
+            Source += ReconstructedRowSize;
         }
     }
 
@@ -5287,6 +5114,23 @@ void* memset(void* DestInit, tr_s32 ByteInit, tr_usize Size)
 {
     tr_u8* Dest = (tr_u8*)DestInit;
 
+#if TR_ARCHITECTURE_X64
+    __m128i Byte16x = _mm_set1_epi8(ByteInit);
+
+    while (Size >= 64)
+    {
+        __m128i* StoreAt = (__m128i*)Dest;
+
+        _mm_storeu_si128(StoreAt + 0, Byte16x);
+        _mm_storeu_si128(StoreAt + 1, Byte16x);
+        _mm_storeu_si128(StoreAt + 2, Byte16x);
+        _mm_storeu_si128(StoreAt + 3, Byte16x);
+
+        Dest += 64;
+        Size -= 64;
+    }
+#endif
+
     while (Size--)
         *Dest++ = (tr_u8)ByteInit;
 
@@ -5304,6 +5148,23 @@ void* memcpy(void* DestInit, const void* SourceInit, tr_usize Size)
 {
     tr_u8* Dest = (tr_u8*)DestInit;
     tr_u8* Source = (tr_u8*)SourceInit;
+
+#if TR_ARCHITECTURE_X64
+    while (Size >= 64)
+    {
+        __m128i* StoreAt = (__m128i*)Dest;
+        __m128i* LoadAt = (__m128i*)Source;
+
+        _mm_storeu_si128(StoreAt + 0, _mm_loadu_si128(LoadAt + 0));
+        _mm_storeu_si128(StoreAt + 1, _mm_loadu_si128(LoadAt + 1));
+        _mm_storeu_si128(StoreAt + 2, _mm_loadu_si128(LoadAt + 2));
+        _mm_storeu_si128(StoreAt + 3, _mm_loadu_si128(LoadAt + 3));
+
+        Dest += 64;
+        Source += 64;
+        Size -= 64;
+    }
+#endif
 
     while (Size--)
         *Dest++ = *Source++;
