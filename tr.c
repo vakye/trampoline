@@ -82,6 +82,34 @@ tr_func tr_str trCString(const char* A)
     return (Result);
 }
 
+tr_func tr_str trViewString(tr_str String, tr_usize From, tr_usize Size)
+{
+    tr_usize Left = TR_MIN(From, String.Size);
+    tr_usize Right = TR_MIN(Left + Size, String.Size);
+
+    tr_str Result = trStrData(String.Data + Left, Right - Left);
+    return (Result);
+}
+
+tr_func tr_b32 trStringStartsWith(tr_str String, tr_str Match)
+{
+    tr_b32 Result = (String.Size >= Match.Size);
+
+    if (Result)
+    {
+        for (tr_usize Index = 0; Index < Match.Size; Index++)
+        {
+            if (String.Data[Index] != Match.Data[Index])
+            {
+                Result = TR_FALSE;
+                break;
+            }
+        }
+    }
+
+    return (Result);
+}
+
 /////////////////////////////////////////////////
 // NOTE(vak): Arena
 /////////////////////////////////////////////////
@@ -223,6 +251,335 @@ tr_func tr_f32 trRandomF32(tr_random* Entropy, tr_f32 From, tr_f32 To)
 }
 
 /////////////////////////////////////////////////
+// NOTE(vak): String formatting
+/////////////////////////////////////////////////
+
+tr_func tr_str trFormatTemp(tr_str Format, ...)
+{
+    va_list ArgList = {0};
+    va_start(ArgList, Format);
+    tr_str Result = trVFormatWithArena(trGetTemporaryArena(), Format, ArgList);
+    va_end(ArgList);
+
+    return (Result);
+}
+
+tr_func tr_str trFormatWithArena(tr_arena* Arena, tr_str Format, ...)
+{
+    va_list ArgList = {0};
+    va_start(ArgList, Format);
+    tr_str Result = trVFormatWithArena(Arena, Format, ArgList);
+    va_end(ArgList);
+
+    return (Result);
+}
+
+typedef enum
+{
+    TR_FORMAT_KIND_NIL = 0,
+    TR_FORMAT_KIND_INT,
+    TR_FORMAT_KIND_CSTR,
+    TR_FORMAT_KIND_STR,
+    TR_FORMAT_KIND_CHAR,
+    TR_FORMAT_KIND_FLOAT,
+} tr_format_kind;
+
+tr_func tr_str trVFormatWithArena(tr_arena* Arena, tr_str Format, va_list ArgList)
+{
+    if (!Arena || trIsNilString(Format))
+        return trStr("");
+
+    tr_usize Index = 0;
+    tr_usize Count = 0;
+
+    char* Data = (char*)trGetArenaBase(Arena) + trGetArenaPosition(Arena);
+
+    while (Index < Format.Size)
+    {
+        while (Index < Format.Size)
+        {
+            char Character = Format.Data[Index];
+            if (Character == '%') break;
+
+            trPushArena(Arena, 1);
+            Data[Count++] = Character;
+
+            Index++;
+        }
+
+        Index++; // NOTE(vak): Jump past '%'
+
+        if (Index >= Format.Size) break;
+
+        tr_str SpecifierSlice = trViewString(
+            Format,
+            Index,
+            Format.Size - Index
+        );
+
+        tr_format_kind FormatKind = TR_FORMAT_KIND_NIL;
+        tr_str MatchedString = {0};
+
+        tr_b32 IntegerSigned = TR_FALSE;
+        tr_u32 IntegerBytes = 0;
+        tr_u32 IntegerBase = 0;
+        tr_u32 FloatBytes = 0;
+
+        #define TR_DO_MATCH_INTEGER(String, Signed, Bytes, Base) \
+            else if (trStringStartsWith(SpecifierSlice, trStr(String))) \
+            { \
+                FormatKind = TR_FORMAT_KIND_INT; \
+                IntegerSigned = Signed; \
+                IntegerBytes = Bytes; \
+                IntegerBase = Base; \
+                MatchedString = trStr(String); \
+            } \
+
+        if (0) {}
+
+        TR_DO_MATCH_INTEGER("s8", TR_TRUE, 1, 10)
+        TR_DO_MATCH_INTEGER("s16", TR_TRUE, 2, 10)
+        TR_DO_MATCH_INTEGER("s32", TR_TRUE, 4, 10)
+        TR_DO_MATCH_INTEGER("s64", TR_TRUE, 8, 10)
+        TR_DO_MATCH_INTEGER("ssize", TR_TRUE, 8, 10)
+
+        TR_DO_MATCH_INTEGER("u8", TR_FALSE, 1, 10)
+        TR_DO_MATCH_INTEGER("u16", TR_FALSE, 2, 10)
+        TR_DO_MATCH_INTEGER("u32", TR_FALSE, 4, 10)
+        TR_DO_MATCH_INTEGER("u64", TR_FALSE, 8, 10)
+        TR_DO_MATCH_INTEGER("usize", TR_FALSE, 8, 10)
+
+        TR_DO_MATCH_INTEGER("b8", TR_FALSE, 1, 2)
+        TR_DO_MATCH_INTEGER("b16", TR_FALSE, 2, 2)
+        TR_DO_MATCH_INTEGER("b32", TR_FALSE, 4, 2)
+        TR_DO_MATCH_INTEGER("b64", TR_FALSE, 8, 2)
+        TR_DO_MATCH_INTEGER("bsize", TR_FALSE, 8, 2)
+
+        TR_DO_MATCH_INTEGER("o8", TR_FALSE, 1, 8)
+        TR_DO_MATCH_INTEGER("o16", TR_FALSE, 2, 8)
+        TR_DO_MATCH_INTEGER("o32", TR_FALSE, 4, 8)
+        TR_DO_MATCH_INTEGER("o64", TR_FALSE, 8, 8)
+        TR_DO_MATCH_INTEGER("osize", TR_FALSE, 8, 8)
+
+        TR_DO_MATCH_INTEGER("x8", TR_FALSE, 1, 16)
+        TR_DO_MATCH_INTEGER("x16", TR_FALSE, 2, 16)
+        TR_DO_MATCH_INTEGER("x32", TR_FALSE, 4, 16)
+        TR_DO_MATCH_INTEGER("x64", TR_FALSE, 8, 16)
+        TR_DO_MATCH_INTEGER("xsize", TR_FALSE, 8, 16)
+
+        else if (trStringStartsWith(SpecifierSlice, trStr("cstr")))
+        {
+            FormatKind = TR_FORMAT_KIND_CSTR;
+            MatchedString = trStr("cstr");
+        }
+        else if (trStringStartsWith(SpecifierSlice, trStr("str")))
+        {
+            FormatKind = TR_FORMAT_KIND_STR;
+            MatchedString = trStr("str");
+        }
+        else if (trStringStartsWith(SpecifierSlice, trStr("char")))
+        {
+            FormatKind = TR_FORMAT_KIND_CHAR;
+            MatchedString = trStr("char");
+        }
+        else if (trStringStartsWith(SpecifierSlice, trStr("f32")))
+        {
+            FormatKind = TR_FORMAT_KIND_FLOAT;
+            FloatBytes = 4;
+            MatchedString = trStr("f32");
+        }
+        else if (trStringStartsWith(SpecifierSlice, trStr("f64")))
+        {
+            FormatKind = TR_FORMAT_KIND_FLOAT;
+            FloatBytes = 8;
+            MatchedString = trStr("f64");
+        }
+
+        #undef TR_DO_MATCH_INTEGER
+
+        static char Buffer[1024] = {0};
+        tr_usize BufferCount = 0;
+        tr_str Formatted = {0};
+
+        if (FormatKind == TR_FORMAT_KIND_INT)
+        {
+            tr_usize Unsigned = 0;
+
+            if (IntegerSigned)
+            {
+                tr_ssize Signed = 0;
+
+                switch (IntegerBytes)
+                {
+                    case 1: Signed = (tr_ssize)(tr_s8)va_arg(ArgList, tr_s32); break;
+                    case 2: Signed = (tr_ssize)(tr_s16)va_arg(ArgList, tr_s32); break;
+                    case 4: Signed = (tr_ssize)va_arg(ArgList, tr_s32); break;
+                    case 8: Signed = (tr_ssize)va_arg(ArgList, tr_s64); break;
+                }
+
+                if (Signed < 0)
+                {
+                    TR_ASSERT(BufferCount < sizeof(Buffer));
+                    Buffer[BufferCount++] = '-';
+                }
+
+                Unsigned = (tr_usize)TR_ABS(Signed);
+            }
+            else
+            {
+                switch (IntegerBytes)
+                {
+                    case 1: Unsigned = (tr_usize)(tr_u8)va_arg(ArgList, tr_u32); break;
+                    case 2: Unsigned = (tr_usize)(tr_u16)va_arg(ArgList, tr_u32); break;
+                    case 4: Unsigned = (tr_usize)va_arg(ArgList, tr_u32); break;
+                    case 8: Unsigned = (tr_usize)va_arg(ArgList, tr_u64); break;
+                }
+            }
+
+            static char Map[] = "0123456789abcdef";
+
+            tr_usize Begin = BufferCount;
+            do
+            {
+                tr_usize Digit = Unsigned % IntegerBase;
+                Unsigned /= IntegerBase;
+
+                TR_ASSERT(Digit < TR_ARRAY_COUNT(Map));
+
+                if (BufferCount < sizeof(Buffer))
+                    Buffer[BufferCount++] = Map[Digit];
+            } while (Unsigned);
+
+            tr_usize DigitCount = BufferCount - Begin;
+
+            for (tr_usize Index = 0; Index <= DigitCount/2; Index++)
+            {
+                tr_usize A = Index;
+                tr_usize B = DigitCount - Index - 1;
+
+                char Temp = Buffer[Begin + A];
+                Buffer[Begin + A] = Buffer[Begin + B];
+                Buffer[Begin + B] = Temp;
+            }
+
+            Formatted = trStrData(Buffer, BufferCount);
+        }
+        else if (FormatKind == TR_FORMAT_KIND_CSTR)
+        {
+            Formatted = trCString(va_arg(ArgList, char*));
+        }
+        else if (FormatKind == TR_FORMAT_KIND_STR)
+        {
+            Formatted = va_arg(ArgList, tr_str);
+        }
+        else if (FormatKind == TR_FORMAT_KIND_CHAR)
+        {
+            if (BufferCount < sizeof(Buffer))
+                Buffer[BufferCount++] = (char)va_arg(ArgList, tr_s32);
+
+            Formatted = trStrData(Buffer, BufferCount);
+        }
+        else if (FormatKind == TR_FORMAT_KIND_FLOAT)
+        {
+            tr_f64 Value = 0.0;
+
+            switch (FloatBytes)
+            {
+                case 4: Value = (tr_f32)va_arg(ArgList, tr_f64); break;
+                case 8: Value = va_arg(ArgList, tr_f64); break;
+            }
+
+            if (Value < 0.0)
+            {
+                if (BufferCount < sizeof(Buffer))
+                    Buffer[BufferCount++] = '-';
+
+                Value = -Value;
+            }
+
+            tr_f64 IntegerPart = trFloorF64(Value);
+            tr_f64 DecimalPart = Value - IntegerPart;
+
+            tr_usize Begin = BufferCount;
+            while (BufferCount < sizeof(Buffer))
+            {
+                tr_f64 A = trFloorF64(IntegerPart / 10.0);
+                tr_f64 B = IntegerPart - A*10.0;
+
+                char DigitCharacter = '0' + (tr_usize)(B);
+                IntegerPart = A;
+
+                Buffer[BufferCount++] = DigitCharacter;
+
+                if (IntegerPart <= 0.0)
+                    break;
+            }
+
+            tr_usize DigitCount = BufferCount - Begin;
+
+            for (tr_usize Index = 0; Index <= DigitCount/2; Index++)
+            {
+                tr_usize A = Index;
+                tr_usize B = DigitCount - Index - 1;
+
+                char Temp = Buffer[Begin + A];
+                Buffer[Begin + A] = Buffer[Begin + B];
+                Buffer[Begin + B] = Temp;
+            }
+
+            if (BufferCount < sizeof(Buffer))
+                Buffer[BufferCount++] = '.';
+
+            tr_usize DecimalDigits = 4;
+
+            for (tr_usize Index = 0; Index < DecimalDigits; Index++)
+            {
+                if (BufferCount == sizeof(Buffer)) break;
+
+                DecimalPart *= 10.0;
+
+                tr_usize Digit = (tr_usize)DecimalPart;
+                char DigitCharacter = '0' + (tr_usize)(DecimalPart);
+
+                DecimalPart -= Digit;
+
+                Buffer[BufferCount++] = DigitCharacter;
+            }
+
+            Formatted = trStrData(Buffer, BufferCount);
+        }
+
+        if (FormatKind != TR_FORMAT_KIND_NIL)
+        {
+            if (!trIsNilString(Formatted))
+            {
+                trPushArena(Arena, Formatted.Size);
+                trCopyMemory(Data + Count, Formatted.Data, Formatted.Size);
+                Count += Formatted.Size;
+            }
+
+            Index += MatchedString.Size;
+        }
+        else
+        {
+            if (Index < Format.Size)
+            {
+                char Character = Format.Data[Index];
+
+                trPushArena(Arena, 1);
+                Data[Count++] = Character;
+
+                Index++;
+            }
+        }
+    }
+
+    tr_str Result = trStrData(Data, Count);
+
+    return (Result);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Printing
 /////////////////////////////////////////////////
 
@@ -254,149 +611,19 @@ tr_func tr_usize trPrintln(tr_str Message)
     return (Result);
 }
 
-tr_func tr_usize trPrintHex(tr_usize Value)
+tr_func tr_usize trPrintf(tr_str Format, ...)
 {
-    char Buffer[64] = {0};
+    tr_arena* Arena = trGetTemporaryArena();
+    tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
-    tr_usize DigitIndex = sizeof(Buffer);
-    tr_usize DigitCount = 0;
+    va_list ArgList = {0};
+    va_start(ArgList, Format);
+    tr_str Formatted = trVFormatWithArena(Arena, Format, ArgList);
+    va_end(ArgList);
 
-    do
-    {
-        tr_usize Digit = (Value % 16);
-        Value /= 16;
+    tr_usize Result = trPrint(Formatted);
 
-        char DigitCharacter =
-            (Digit <= 9)  * ('0' + Digit) +
-            (Digit >= 10) * ('a' + Digit - 10);
-
-        DigitIndex--;
-        DigitCount++;
-
-        Buffer[DigitIndex] = DigitCharacter;
-    } while (Value);
-
-    tr_usize Result = trPrint(trStrData(Buffer + DigitIndex, DigitCount));
-
-    return (Result);
-}
-
-tr_func tr_usize trPrintBinary(tr_usize Value)
-{
-    char Buffer[64] = {0};
-
-    tr_usize DigitIndex = sizeof(Buffer);
-    tr_usize DigitCount = 0;
-
-    do
-    {
-        char DigitCharacter = '0' + (Value % 2);
-        Value /= 2;
-
-        DigitIndex--;
-        DigitCount++;
-
-        Buffer[DigitIndex] = DigitCharacter;
-    } while (Value);
-
-    tr_usize Result = trPrint(trStrData(Buffer + DigitIndex, DigitCount));
-
-    return (Result);
-}
-
-tr_func tr_usize trPrintUSize(tr_usize Value)
-{
-    char Buffer[64] = {0};
-
-    tr_usize DigitIndex = sizeof(Buffer);
-    tr_usize DigitCount = 0;
-
-    do
-    {
-        char DigitCharacter = '0' + (Value % 10);
-        Value /= 10;
-
-        DigitIndex--;
-        DigitCount++;
-
-        Buffer[DigitIndex] = DigitCharacter;
-    } while (Value);
-
-    tr_usize Result = trPrint(trStrData(Buffer + DigitIndex, DigitCount));
-
-    return (Result);
-}
-
-tr_func tr_usize trPrintSSize(tr_ssize Value)
-{
-    tr_usize Result = 0;
-
-    if (Value < 0)
-    {
-        Result += trPrintCharacter('-');
-        Value = -Value;
-    }
-
-    Result += trPrintUSize(Value);
-
-    return (Result);
-}
-
-tr_func tr_usize trPrintF64(tr_f64 Value)
-{
-    tr_usize Result = 0;
-
-    if (Value < 0)
-    {
-        Result += trPrintCharacter('-');
-        Value = -Value;
-    }
-
-    char Buffer[512] = {0};
-
-    tr_f64 IntegerPart = trFloorF64(Value);
-    tr_f64 DecimalPart = Value - IntegerPart;
-
-    {
-        tr_usize DigitIndex = sizeof(Buffer);
-        tr_usize DigitCount = 0;
-
-        do
-        {
-            tr_f64 A = trFloorF64(IntegerPart / 10.0);
-            tr_f64 B = IntegerPart - A*10.0;
-
-            char DigitCharacter = '0' + (tr_usize)(B);
-            IntegerPart = A;
-
-            DigitIndex--;
-            DigitCount++;
-
-            Buffer[DigitIndex] = DigitCharacter;
-        } while (IntegerPart);
-
-        Result += trPrint(trStrData(Buffer + DigitIndex, DigitCount));
-    }
-
-    Result += trPrintCharacter('.');
-
-    tr_usize DecimalDigits = 4;
-
-    {
-        for (tr_usize Index = 0; Index < DecimalDigits; Index++)
-        {
-            DecimalPart *= 10.0;
-
-            tr_usize Digit = (tr_usize)DecimalPart;
-            char DigitCharacter = '0' + (tr_usize)(DecimalPart);
-
-            DecimalPart -= Digit;
-
-            Buffer[Index] = DigitCharacter;
-        }
-
-        Result += trPrint(trStrData(Buffer, DecimalDigits));
-    }
+    trSetArenaPosition(Arena, ResetArenaTo);
 
     return (Result);
 }

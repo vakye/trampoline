@@ -32,9 +32,7 @@ void Setup(void)
     {
         gallery_entry* Entry = Entries + Index;
 
-        trPrint(trStr("Loading '"));
-        trPrint(Entry->FilePath);
-        trPrint(trStr("'"));
+        trPrintf(trStr("Loading '%str': "), Entry->FilePath);
 
         tr_clock BeginTime = trGetWallClock();
 
@@ -44,16 +42,16 @@ void Setup(void)
 
         if (Entry->Texture)
         {
-            trPrint(trStr(": Done in "));
-            trPrintF64(1000.0 * trGetSecondsElapsed(BeginTime, EndTime));
-            trPrint(trStr("ms"));
+            tr_f64 Milliseconds = 1000.0 * trGetSecondsElapsed(BeginTime, EndTime);
+
+            trPrintf(trStr("Done in %f64 ms"), Milliseconds);
 
             Entry->Width = trGetTextureWidth(Entry->Texture);
             Entry->Height = trGetTextureHeight(Entry->Texture);
         }
         else
         {
-            trPrint(trStr(": Failed"));
+            trPrint(trStr("Failed"));
         }
 
         trPrintNewLine();

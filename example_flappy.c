@@ -108,6 +108,8 @@ void Setup(void)
 
 void Frame(tr_f32 LastFrameTime)
 {
+    trResetArena(trGetTemporaryArena());
+
     tr_f32 TimeStep = LastFrameTime;
 
     tr_f32 WindowW = trGetWindowWidth();
@@ -230,24 +232,7 @@ void Frame(tr_f32 LastFrameTime)
 
     if (Game.Started)
     {
-        char Buffer[32]  = {0};
-
-        tr_u32 DigitIndex = sizeof(Buffer);
-        tr_u32 DigitCount = 0;
-
-        tr_u32 Value = Game.Score;
-        do
-        {
-            char Digit = '0' + (Value % 10);
-            Value /= 10;
-
-            DigitIndex--;
-            DigitCount++;
-
-            Buffer[DigitIndex] = Digit;
-        } while (Value);
-
-        tr_str Text = trStrData(Buffer + DigitIndex, DigitCount);
+        tr_str Text = trFormatTemp(trStr("%u32"), Game.Score);
 
         tr_f32 X = 0.50f * (WindowW - trMeasureTextWidth(Text));
         tr_f32 Y = 0.05f * (WindowH - trMeasureTextHeight(Text));

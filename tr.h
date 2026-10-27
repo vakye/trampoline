@@ -175,8 +175,9 @@ typedef struct
 #define trStaticStrData(Data, Size) {Data, Size}
 
 tr_func tr_b32 trIsNilString(tr_str String);
-
 tr_func tr_str trCString(const char* A);
+tr_func tr_str trViewString(tr_str String, tr_usize From, tr_usize Size);
+tr_func tr_b32 trStringStartsWith(tr_str String, tr_str Match);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Arena
@@ -226,6 +227,55 @@ tr_func tr_u32 trRandomU32(tr_random* Entropy);
 tr_func tr_f32 trRandomF32(tr_random* Entropy, tr_f32 From, tr_f32 To);
 
 /////////////////////////////////////////////////
+// NOTE(vak): String formatting:
+
+//      %s8     - Signed 8-bit integer (decimal)
+//      %s16    - Signed 16-bit integer (decimal)
+//      %s32    - Signed 32-bit integer (decimal)
+//      %s64    - Signed 64-bit integer (decimal)
+//      %ssize  - Signed largest machine integer (decimal)
+
+//      %u8     - Unsigned 8-bit integer (decimal)
+//      %u16    - Unsigned 16-bit integer (decimal)
+//      %u32    - Unsigned 32-bit integer (decimal)
+//      %u64    - Unsigned 64-bit integer (decimal)
+//      %usize  - Unsigned largest machine integer (decimal)
+
+//      %b8     - Unsigned 8-bit integer (binary)
+//      %b16    - Unsigned 16-bit integer (binary)
+//      %b32    - Unsigned 32-bit integer (binary)
+//      %b64    - Unsigned 64-bit integer (binary)
+//      %bsize  - Unsigned largest machine integer (binary)
+
+//      %o8     - Unsigned 8-bit integer (binary)
+//      %o16    - Unsigned 16-bit integer (octal)
+//      %o32    - Unsigned 32-bit integer (octal)
+//      %o64    - Unsigned 64-bit integer (octal)
+//      %osize  - Unsigned largest machine integer (octal)
+
+//      %x8     - Unsigned 8-bit integer (hex)
+//      %x16    - Unsigned 16-bit integer (hex)
+//      %x32    - Unsigned 32-bit integer (hex)
+//      %x64    - Unsigned 64-bit integer (hex)
+//      %xsize  - Unsigned largest machine integer (hex)
+
+//      %cstr   - C String (char*)
+//      %str    - String (tr_str)
+
+//      %char   - ASCII character (char)
+
+//      %f32    - 32-bit floating point value
+//      %f64    - 64-bit floating point value
+
+/////////////////////////////////////////////////
+
+#include <stdarg.h> // NOTE(vak): For va_list, ...
+
+tr_func tr_str trFormatTemp(tr_str Format, ...); // NOTE(vak): Format with trGetTemporaryArena() as allocator
+tr_func tr_str trFormatWithArena(tr_arena* Arena, tr_str Format, ...);
+tr_func tr_str trVFormatWithArena(tr_arena* Arena, tr_str Format, va_list ArgList); 
+
+/////////////////////////////////////////////////
 // NOTE(vak): Printing
 /////////////////////////////////////////////////
 
@@ -233,11 +283,7 @@ tr_func tr_usize trPrintCharacter(char Character);
 tr_func tr_usize trPrintNewLine(void);
 tr_func tr_usize trPrint(tr_str Message);
 tr_func tr_usize trPrintln(tr_str Message);
-tr_func tr_usize trPrintHex(tr_usize Value);
-tr_func tr_usize trPrintBinary(tr_usize Value);
-tr_func tr_usize trPrintUSize(tr_usize Value);
-tr_func tr_usize trPrintSSize(tr_ssize Value);
-tr_func tr_usize trPrintF64(tr_f64 Value);
+tr_func tr_usize trPrintf(tr_str Format, ...);
 
 /////////////////////////////////////////////////
 // NOTE(vak): Rounding

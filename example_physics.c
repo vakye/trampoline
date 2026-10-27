@@ -43,6 +43,8 @@ void Setup(void)
 
 void Frame(tr_f32 LastFrameTime)
 {
+    trResetArena(trGetTemporaryArena());
+
     // NOTE(vak): Do mouse picking
 
     static body* PickingBody = 0;
@@ -208,6 +210,14 @@ void Frame(tr_f32 LastFrameTime)
             15.0f,
             0.6f, 0.8f, 1.0f, 0.7f + 0.3f*(PickingBody != 0)
         );
+
+        tr_str Text = trFormatTemp(trStr(
+            "Body:\n"
+            "X: %f32, DX: %f32\n"
+            "Y: %f32, DY: %f32\n"
+        ), Body->X, Body->DX, Body->Y, Body->DY);
+
+        trText2D(Text, 10, 10, 0.98f, 0.97f, 0.89f, 1.0f);
     }
 
     // NOTE(vak): Draw bodies to the screen
