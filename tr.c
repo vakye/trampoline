@@ -61,6 +61,12 @@ tr_func tr_u32 trBigToHostEndian32(tr_u32 Value)
 // NOTE(vak): Strings
 /////////////////////////////////////////////////
 
+tr_func tr_b32 trIsNilString(tr_str String)
+{
+    tr_b32 Result = (!String.Data || !String.Size);
+    return (Result);
+}
+
 tr_func tr_str trCString(const char* A)
 {
     tr_str Result = {0};
@@ -577,6 +583,9 @@ static tr_usize trLinuxSyscall(
     return (Result);
 }
 
+// NOTE(vak): Only used for builds without stdlib, so we need
+// to handle the entry point by ourselves.
+
 __attribute__((naked))
 void trEntryPoint(void)
 {
@@ -586,15 +595,15 @@ void trEntryPoint(void)
         "mov 0 (%rsp),          %edi\n"
         "lea 8 (%rsp),          %rsi\n"
         "lea 16(%rsp, %rdi, 8), %rdx\n"
-        "call trLinuxBootstrap\n"
+        "call main\n"
+        "mov %eax, %edi\n" // NOTE(vak): Exit code
+        "mov $231, %eax\n" // NOTE(vak): __NR_exit_group
+        "syscall\n"
     );
 #else
     #error Linux entry point is not implemented for this architecture
 #endif
 }
-
-void Setup(void); // NOTE(vak): Implemented by user
-void Frame(tr_f32 LastFrameTime); // NOTE(vak): Implemented by user
 
 tr_func void trLinuxWaylandSetup(void);
 tr_func tr_b32 trLinuxWaylandShouldQuit(void);
@@ -614,57 +623,74 @@ tr_func void trVulkanEndFrame(void);
 
 typedef struct
 {
+    tr_clock FrameBegin;
     tr_f64 TargetFPS;
 } tr_linux_state;
 
 static tr_linux_state trLinux = {0};
 
-void trLinuxBootstrap(tr_s32 ArgCount, char* Args[], char* Envp[])
+tr_func void trSetup(void)
 {
     trLinuxWaylandSetup();
     trVulkanSetup();
 
     trLinux.TargetFPS = 60.0;
-
-    Setup();
-
-    tr_clock FrameBegin = trGetWallClock();
-    tr_f64 LastFrameTime = 0.0f;
-
-    while (!trLinuxWaylandShouldQuit())
-    {
-        trLinuxWaylandPollEvents();
-        trVulkanBeginFrame();
-
-        Frame(LastFrameTime);
-
-        trVulkanEndFrame();
-        trLinuxWaylandPresent();
-
-        tr_f64 DesiredFrameTime = 1.0 / trLinux.TargetFPS;
-
-        LastFrameTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
-
-        while (LastFrameTime < DesiredFrameTime)
-        {
-            trWait(DesiredFrameTime - LastFrameTime);
-            LastFrameTime = trGetSecondsElapsed(FrameBegin, trGetWallClock());
-        }
-
-        FrameBegin = trGetWallClock();
-    }
-
-    trLinuxSyscall(
-        TR_LINUX_SYSCALL_NR_EXIT_GROUP, 0,
-        0, 0, 0, 0, 0
-    );
 }
 
+tr_func tr_b32 trShouldQuit(void)
+{
+    return trLinuxWaylandShouldQuit();
+}
+
+tr_func void trBeginFrame(void)
+{
+    trLinux.FrameBegin = trGetWallClock();
+
+    trLinuxWaylandPollEvents();
+    trVulkanBeginFrame();
+}
+
+tr_func void trEndFrame(void)
+{
+    trVulkanEndFrame();
+    trLinuxWaylandPresent();
+
+    if (trLinux.TargetFPS > 0.0)
+    {
+        tr_f64 DesiredFrameTime = 1.0 / trLinux.TargetFPS;
+        tr_f32 FrameTime = trGetSecondsElapsed(trLinux.FrameBegin, trGetWallClock());
+
+        while (FrameTime < DesiredFrameTime)
+        {
+            trWait(DesiredFrameTime - FrameTime);
+            FrameTime = trGetSecondsElapsed(trLinux.FrameBegin, trGetWallClock());
+        }
+    }
+}
+
+void Main(void); // NOTE(vak): Implemented by user if TR_CUSTOM_MAIN is defined
+void Setup(void); // NOTE(vak): Implemented by user
+void Frame(tr_f32 LastFrameTime); // NOTE(vak): Implemented by user
+
+#if !defined(TR_CUSTOM_MAIN)
 int main(tr_s32 ArgCount, char* Args[], char* Envp[])
 {
-    trLinuxBootstrap(ArgCount, Args, Envp);
+    trSetup();
+    Setup();
+
+    tr_f64 LastFrameTime = 0.0f;
+
+    while (!trShouldQuit())
+    {
+        trBeginFrame();
+        Frame(LastFrameTime);
+        trEndFrame();
+
+        LastFrameTime = trGetSecondsElapsed(trLinux.FrameBegin, trGetWallClock());
+    }
     return (0);
 }
+#endif
 
 tr_func tr_f64 trGetTargetFPS(void)
 {
@@ -763,80 +789,77 @@ typedef struct
     tr_s64          Unused[3];
 } tr_linux_stat;
 
-tr_func tr_loaded_file trLoadFile(tr_str FilePath)
+tr_func tr_b32 trLoadFile(tr_loaded_file* Loaded, tr_str FilePath)
 {
-    tr_loaded_file Result = {0};
+    if (!Loaded || trIsNilString(FilePath))
+        return (TR_FALSE);
 
-    tr_s32 FileDescriptor = -1;
+    trZeroType(Loaded);
 
     static char NullTerminated[4096] = {0};
 
-    if (FilePath.Size + 1 <= sizeof(NullTerminated))
-    {
-        trCopyMemory(NullTerminated, FilePath.Data, FilePath.Size);
+    if (FilePath.Size + 1 > sizeof(NullTerminated))
+        return (TR_FALSE);
 
-        NullTerminated[FilePath.Size] = '\0';
+    trCopyMemory(NullTerminated, FilePath.Data, FilePath.Size);
+    NullTerminated[FilePath.Size] = '\0';
 
-        FileDescriptor = trLinuxSyscall(
-            TR_LINUX_SYSCALL_NR_OPEN,
-            (tr_usize)NullTerminated,
-            0, // NOTE(vak): O_RDONLY
-            0, 0, 0, 0
-        );
-    }
+    tr_s32 FileDescriptor = trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_OPEN,
+        (tr_usize)NullTerminated,
+        0, // NOTE(vak): O_RDONLY
+        0, 0, 0, 0
+    );
 
-    if (FileDescriptor > 2)
-    {
-        tr_linux_stat Stat = {0};
+    if (FileDescriptor < 0)
+        goto LoadingFailed;
 
-        tr_s32 StatResult = trLinuxSyscall(
-            TR_LINUX_SYSCALL_NR_FSTAT,
-            FileDescriptor,
-            (tr_usize)&Stat,
-            0, 0, 0, 0
-        );
+    tr_linux_stat Stat = {0};
 
-        if (StatResult >= 0)
-            Result.Size = Stat.FileSize;
-    }
+    tr_s32 StatResult = trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_FSTAT,
+        FileDescriptor,
+        (tr_usize)&Stat,
+        0, 0, 0, 0
+    );
 
-    if (Result.Size)
+    if (StatResult < 0)
+        goto LoadingFailed;
+
+    Loaded->Size = Stat.FileSize;
+
+    if (Loaded->Size > 0)
     {
         tr_ssize Mapping = trLinuxSyscall(
             TR_LINUX_SYSCALL_NR_MMAP,
             0,
-            Result.Size,
+            Loaded->Size,
             0x3,    // NOTE(vak): PROT_READ | PROT_WRITE,
             0x22,   // NOTE(vak): MAP_PRIVATE | MAP_ANON
             -1,
             0
         );
 
-        Result.Data = (void*)TR_MAX(0, Mapping);
-    }
+        Loaded->Data = (void*)TR_MAX(0, Mapping);
 
-    if (Result.Data)
-    {
+        if (!Loaded->Data)
+            goto LoadingFailed;
+
         tr_ssize ReadResult = trLinuxSyscall(
             TR_LINUX_SYSCALL_NR_READ,
             FileDescriptor,
-            (tr_usize)Result.Data,
-            Result.Size,
+            (tr_usize)Loaded->Data,
+            Loaded->Size,
             0, 0, 0
         );
 
         tr_usize BytesRead = TR_MAX(0, ReadResult);
 
-        if (BytesRead != Result.Size)
-        {
-            trUnloadFile(Result);
-
-            Result.Data = 0;
-            Result.Size = 0;
-        }
+        if (BytesRead != Loaded->Size)
+            goto LoadingFailed;
     }
 
-    if (FileDescriptor > 2)
+    if (FileDescriptor > 0)
     {
         trLinuxSyscall(
             TR_LINUX_SYSCALL_NR_CLOSE,
@@ -845,20 +868,40 @@ tr_func tr_loaded_file trLoadFile(tr_str FilePath)
         );
     }
 
-    return (Result);
+    return (TR_TRUE);
+
+LoadingFailed:
+
+    trUnloadFile(Loaded);
+
+    if (FileDescriptor > 0)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_CLOSE,
+            FileDescriptor,
+            0, 0, 0, 0, 0
+        );
+    }
+
+    return (TR_FALSE);
 }
 
-tr_func void trUnloadFile(tr_loaded_file LoadedFile)
+tr_func void trUnloadFile(tr_loaded_file* Loaded)
 {
-    if (LoadedFile.Data)
+    if (!Loaded)
+        return;
+
+    if (Loaded->Data)
     {
         trLinuxSyscall(
             TR_LINUX_SYSCALL_NR_MUNMAP,
-            (tr_usize)LoadedFile.Data,
-            LoadedFile.Size,
+            (tr_usize)Loaded->Data,
+            Loaded->Size,
             0, 0, 0, 0
         );
     }
+
+    trZeroType(Loaded);
 }
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size)
@@ -3253,14 +3296,15 @@ tr_func tr_texture trLoadTexture(tr_str FilePath)
     tr_arena* Arena = trGetTemporaryArena();
     tr_usize ResetArenaTo = trGetArenaPosition(Arena);
 
-    tr_loaded_file File = trLoadFile(FilePath);
+    tr_loaded_file File = {0};
+    tr_b32 LoadedOkay = trLoadFile(&File, FilePath);
 
     tr_u32 Width = 0;
     tr_u32 Height = 0;
     tr_u32 Channels = 0;
     void* Pixels = 0;
 
-    if (File.Data && File.Size)
+    if (LoadedOkay)
     {
         // NOTE(vak): Try to recognize file format
 
@@ -3307,7 +3351,7 @@ tr_func tr_texture trLoadTexture(tr_str FilePath)
             trUploadTexture(Texture, Pixels);
     }
 
-    trUnloadFile(File);
+    trUnloadFile(&File);
     trSetArenaPosition(Arena, ResetArenaTo);
 
     return (Texture);

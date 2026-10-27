@@ -12,11 +12,12 @@ static tr_f32 Alpha = 0.0f;
 
 void Setup(void)
 {
-    tr_loaded_file LoadedFile = trLoadFile(trStr("tr.c"));
+    tr_loaded_file File = {0};
+    tr_b32 LoadedOkay = trLoadFile(&File, trStr("tr.c"));
 
-    if (LoadedFile.Size)
+    if (LoadedOkay)
     {
-        FileText = trStrData(LoadedFile.Data, LoadedFile.Size);
+        FileText = trStrData(File.Data, File.Size);
     }
 
     trRandomSeed(&Entropy);

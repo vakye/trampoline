@@ -174,6 +174,8 @@ typedef struct
 #define trStaticStr(Literal) {Literal, sizeof(Literal) - 1}
 #define trStaticStrData(Data, Size) {Data, Size}
 
+tr_func tr_b32 trIsNilString(tr_str String);
+
 tr_func tr_str trCString(const char* A);
 
 /////////////////////////////////////////////////
@@ -272,11 +274,37 @@ tr_func tr_f32 trTanF32(tr_turns32 X);
 tr_func tr_f32 trSquareRootF32(tr_f32 X);
 
 /////////////////////////////////////////////////
+// NOTE(vak): Custom main
+//
+// If you don't define TR_CUSTOM_MAIN, then you
+// should implement
+//      void Setup(void)
+//      void Frame(tr_f32 LastFrameTime)
+//
+// You don't need to call the setup + begin/end
+// frame functions since trampoline already
+// handles that.
+//
+// Otherwise, if you implement TR_CUSTOM_MAIN,
+// then you should implement
+//      int main(int ArgCount, char* Args[])
+//
+// and handle the setup + main loop yourself
+// by calling trSetup(), trBeginFrame(),
+// trEndFrame(), ...
+/////////////////////////////////////////////////
+
+tr_func void trSetup(void);
+tr_func tr_b32 trShouldQuit(void);
+tr_func void trBeginFrame(void);
+tr_func void trEndFrame(void);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 
 tr_func tr_f64 trGetTargetFPS(void);
-tr_func void trSetTargetFPS(tr_f64 FPS);
+tr_func void trSetTargetFPS(tr_f64 FPS); // NOTE(vak): Set to 0 to disable FPS limiting
 
 tr_func void trToggleFullscreen(void);
 tr_func tr_u32 trGetWindowWidth(void);
@@ -314,8 +342,8 @@ typedef struct
     tr_usize Size;
 } tr_loaded_file;
 
-tr_func tr_loaded_file trLoadFile(tr_str FilePath);
-tr_func void trUnloadFile(tr_loaded_file LoadedFile);
+tr_func tr_b32 trLoadFile(tr_loaded_file* Loaded, tr_str FilePath);
+tr_func void trUnloadFile(tr_loaded_file* Loaded);
 
 tr_func tr_usize trWriteStdOut(void* Data, tr_usize Size);
 tr_func tr_usize trWriteStdErr(void* Data, tr_usize Size);
