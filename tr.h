@@ -338,6 +338,10 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 // and handle the setup + main loop yourself
 // by calling trSetup(), trBeginFrame(),
 // trEndFrame(), ...
+//
+// If you don't link with the CRT then you can
+// implement your own entry point and call
+// trSetup(), trBeginFrame(), ... as usual.
 /////////////////////////////////////////////////
 
 tr_func void trSetup(void);
@@ -373,6 +377,8 @@ typedef enum
     TR_BUTTON_KEY_RIGHT,
 
     TR_BUTTON_KEY_F11,
+
+    TR_BUTTON_KEY_CTRL,
 
     TR_BUTTON_MAX,
 } tr_button;

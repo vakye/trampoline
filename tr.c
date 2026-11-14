@@ -452,7 +452,7 @@ tr_func tr_str trVFormatWithArena(tr_arena* Arena, tr_str Format, va_list ArgLis
 
             tr_usize DigitCount = BufferCount - Begin;
 
-            for (tr_usize Index = 0; Index <= DigitCount/2; Index++)
+            for (tr_usize Index = 0; Index < DigitCount/2; Index++)
             {
                 tr_usize A = Index;
                 tr_usize B = DigitCount - Index - 1;
@@ -895,7 +895,6 @@ tr_func void trEndFrame(void)
     }
 }
 
-void Main(void); // NOTE(vak): Implemented by user if TR_CUSTOM_MAIN is defined
 void Setup(void); // NOTE(vak): Implemented by user
 void Frame(tr_f32 LastFrameTime); // NOTE(vak): Implemented by user
 
@@ -1862,10 +1861,12 @@ tr_func void trLinuxWaylandKeyboardKey(
     {
         default: break;
 
-        case XKB_KEY_space: Button = TR_BUTTON_KEY_SPACE; break;
-        case XKB_KEY_Left:  Button = TR_BUTTON_KEY_LEFT; break;
-        case XKB_KEY_Right: Button = TR_BUTTON_KEY_RIGHT; break;
-        case XKB_KEY_F11:   Button = TR_BUTTON_KEY_F11; break;
+        case XKB_KEY_space:         Button = TR_BUTTON_KEY_SPACE; break;
+        case XKB_KEY_Left:          Button = TR_BUTTON_KEY_LEFT; break;
+        case XKB_KEY_Right:         Button = TR_BUTTON_KEY_RIGHT; break;
+        case XKB_KEY_F11:           Button = TR_BUTTON_KEY_F11; break;
+        case XKB_KEY_Control_L:     Button = TR_BUTTON_KEY_CTRL; break;
+        case XKB_KEY_Control_R:     Button = TR_BUTTON_KEY_CTRL; break;
     }
 
     if (Button != TR_BUTTON_NIL)
