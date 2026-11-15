@@ -8,6 +8,7 @@ static void     UI_Setup        (void);
 static void     UI_BeginWindow  (ui_id ID, tr_str Title, tr_f32 InitialX, tr_f32 InitialY);
 static void     UI_Text         (ui_id ID, tr_str Text);
 static tr_b32   UI_Button       (ui_id ID, tr_str Text);
+static void     UI_Checkbox     (ui_id ID, tr_str Text, tr_b32* State);
 static void     UI_EndWindow    (void);
 
 void Setup(void)
@@ -25,6 +26,7 @@ void Frame(tr_f32 LastFrameTime)
 
     ui_id ID = 1;
     static tr_u32 Counter = 0;
+    static tr_b32 CheckState = 0;
 
     UI_BeginWindow(ID++, trStr("My window"), 100, 100);
 
@@ -32,6 +34,8 @@ void Frame(tr_f32 LastFrameTime)
 
     if (UI_Button(ID++, trFormatTemp(trStr("Click here (%u32)"), Counter)))
         Counter++;
+
+    UI_Checkbox(ID++, trStr("Checkbox"), &CheckState);
 
     UI_EndWindow();
 }
@@ -312,18 +316,120 @@ static tr_b32 UI_Button(ui_id ID, tr_str Text)
 
     trText2D(
         Element->Text,
-        Element->X + 0.5f * (Element->SizeX - trMeasureTextWidth(Text)),
-        Element->Y + 0.5f * (Element->SizeY - trMeasureTextHeight(Text)),
+        Element->X + 0.5f * (Element->SizeX - trMeasureTextWidth(Element->Text)),
+        Element->Y + 0.5f * (Element->SizeY - trMeasureTextHeight(Element->Text)),
         Foreground.R * Inv255,
         Foreground.G * Inv255,
         Foreground.B * Inv255,
         Foreground.A * Inv255
     );
 
+    UIState.CurrentY += Element->SizeY + UIState.PadY;
+
     return (ButtonPressed);
 }
 
+static void UI_Checkbox(ui_id ID, tr_str Text, tr_b32* State)
+{
+    TR_ASSERT(UIState.WindowID);
+    TR_ASSERT(State);
 
+    ui_element* Element = UI_GetElement(ID);
+
+    if (!Element->Initialized)
+        Element->Initialized = TR_TRUE;
+
+    tr_str FullText = trFormatTemp(
+        trStr("%str %str"),
+        (*State) ? trStr("[x]") : trStr("[ ]"),
+        Text
+    );
+
+    // NOTE(vak): Layout
+
+    Element->Text = FullText;
+    Element->X = UIState.CurrentX;
+    Element->Y = UIState.CurrentY;
+    Element->SizeX = trMeasureTextWidth(FullText) + 2*UIState.PadX;
+    Element->SizeY = trMeasureTextHeight(FullText) + + 2*UIState.PadY;
+
+    // NOTE(vak): Checkbox logic
+
+    tr_b32 Pressed = TR_FALSE;
+
+    tr_f32 MouseX = trGetMouseX();
+    tr_f32 MouseY = trGetMouseY();
+
+    tr_b32 LeftDown     = trIsButtonDown(TR_BUTTON_MOUSE_LEFT);
+    tr_b32 LeftPressed  = trIsButtonPressed(TR_BUTTON_MOUSE_LEFT);
+    tr_b32 LeftReleased = trIsButtonReleased(TR_BUTTON_MOUSE_LEFT);
+
+    tr_b32 Hovering =
+        (MouseX > Element->X) &&
+        (MouseY > Element->Y) &&
+        (MouseX < Element->X + Element->SizeX) &&
+        (MouseY < Element->Y + Element->SizeY);
+
+    if ((UIState.HotElementID == ID) && (!Hovering))
+        UIState.HotElementID = 0;
+
+    if ((Hovering) && (!LeftDown))
+        UIState.HotElementID = ID;
+
+    if ((Hovering) && (LeftPressed) && (UIState.ActiveElementID == 0))
+        UIState.ActiveElementID = ID;
+
+    if ((LeftReleased) && (UIState.ActiveElementID == ID))
+    {
+        Pressed = TR_TRUE;
+        UIState.ActiveElementID = 0;
+    }
+
+    if (Pressed)
+        *State = !(*State);
+
+    // NOTE(vak): Draw
+
+    ui_rgba_u8 Foreground = UIState.ForegroundButton;
+    ui_rgba_u8 Background = UIState.BackgroundButton;
+
+    if (UIState.HotElementID == ID)
+    {
+        Foreground = UIState.ForegroundButtonHot;
+        Background = UIState.BackgroundButtonHot;
+    }
+
+    if (UIState.ActiveElementID == ID)
+    {
+        Foreground = UIState.ForegroundButtonActive;
+        Background = UIState.BackgroundButtonActive;
+    }
+
+    tr_f32 Inv255 = 1.0f / 255.0f;
+
+    trRect2D(
+        Element->X,
+        Element->Y,
+        Element->X + Element->SizeX,
+        Element->Y + Element->SizeY,
+        Background.R * Inv255,
+        Background.G * Inv255,
+        Background.B * Inv255,
+        Background.A * Inv255
+    );
+
+    trText2D(
+        Element->Text,
+        Element->X + 0.5f * (Element->SizeX - trMeasureTextWidth(Element->Text)),
+        Element->Y + 0.5f * (Element->SizeY - trMeasureTextHeight(Element->Text)),
+        Foreground.R * Inv255,
+        Foreground.G * Inv255,
+        Foreground.B * Inv255,
+        Foreground.A * Inv255
+    );
+
+    UIState.CurrentY += Element->SizeY + UIState.PadY;
+}
 
 #include "tr.c"
 
