@@ -147,6 +147,7 @@ typedef tr_u64  tr_b64;
 tr_func void trZeroMemory(void* DestInit, tr_usize Size);
 tr_func void trFillMemory(void* DestInit, tr_u8 Byte, tr_usize Size);
 tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size);
+tr_func void trMoveMemory(void* DestInit, void* SourceInit, tr_usize Size);
 
 #define trZeroArray(Pointer, Count) trZeroMemory(Pointer, sizeof(*(Pointer)) * (Count))
 #define trZeroType(Pointer) trZeroArray(Pointer, 1)
@@ -376,6 +377,9 @@ typedef enum
     TR_BUTTON_KEY_LEFT,
     TR_BUTTON_KEY_RIGHT,
 
+    TR_BUTTON_KEY_BACKSPACE,
+    TR_BUTTON_KEY_DELETE,
+
     TR_BUTTON_KEY_F11,
 
     TR_BUTTON_KEY_CTRL,
@@ -387,6 +391,9 @@ tr_func tr_b32 trIsButtonDown(tr_button Button);
 tr_func tr_b32 trIsButtonUp(tr_button Button);
 tr_func tr_b32 trIsButtonPressed(tr_button Button);
 tr_func tr_b32 trIsButtonReleased(tr_button Button);
+
+tr_func tr_usize trGetTypedCount(void);
+tr_func char trGetTypedCharacter(tr_usize Index);
 
 typedef struct
 {
@@ -502,6 +509,9 @@ tr_func void trTexturedRect2D(
 tr_func tr_f32 trMeasureTextWidth(tr_str Text);
 tr_func tr_f32 trMeasureTextHeight(tr_str Text);
 tr_func tr_f32 trGetTextLineHeight(void);
+
+tr_func tr_f32 trGetGlyphOffsetX(tr_str Text, tr_usize Offset);
+tr_func tr_f32 trGetGlyphOffsetY(tr_str Text, tr_usize Offset);
 
 tr_func void trText2D(
     tr_str Text,

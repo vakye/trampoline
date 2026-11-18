@@ -33,6 +33,26 @@ tr_func void trCopyMemory(void* DestInit, void* SourceInit, tr_usize Size)
         *Dest++ = *Source++;
 }
 
+tr_func void trMoveMemory(void* DestInit, void* SourceInit, tr_usize Size)
+{
+    tr_u8* Dest = (tr_u8*)DestInit;
+    tr_u8* Source = (tr_u8*)SourceInit;
+
+    if ((tr_usize)Dest > (tr_usize)Source)
+    {
+        Dest += Size - 1;
+        Source += Size - 1;
+
+        while (Size--)
+            *Dest-- = *Source--;
+    }
+    else
+    {
+        while (Size--)
+            *Dest++ = *Source++;
+    }
+}
+
 /////////////////////////////////////////////////
 // NOTE(vak): Endianness
 /////////////////////////////////////////////////
@@ -843,6 +863,8 @@ tr_func tr_f32 trLinuxWaylandGetMouseX(void);
 tr_func tr_f32 trLinuxWaylandGetMouseY(void);
 tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button);
 tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button);
+tr_func tr_usize trLinuxWaylandGetTypedCount(void);
+tr_func char trLinuxWaylandGetTypedCharacter(tr_usize Index);
 
 tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
@@ -984,6 +1006,18 @@ tr_func tr_b32 trIsButtonReleased(tr_button Button)
         (TR_FALSE == trLinuxWaylandIsButtonDown(Button)) &&
         (TR_TRUE  == trLinuxWaylandWasButtonDown(Button));
 
+    return (Result);
+}
+
+tr_func tr_usize trGetTypedCount(void)
+{
+    tr_usize Result = trLinuxWaylandGetTypedCount();
+    return (Result);
+}
+
+tr_func char trGetTypedCharacter(tr_usize Index)
+{
+    char Result = trLinuxWaylandGetTypedCharacter(Index);
     return (Result);
 }
 
@@ -1516,8 +1550,12 @@ typedef struct
     tr_b32 Quit;
     tr_b32 IsFullscreen;
 
+    tr_b32 ShiftDown;
+    tr_u32 TypedCount;
+
     tr_b32 IsDown[TR_BUTTON_MAX];
     tr_b32 WasDown[TR_BUTTON_MAX];
+    char Typed[256];
 } tr_wayland_state;
 
 static tr_wayland_state trWayland = {0};
@@ -1855,22 +1893,196 @@ tr_func void trLinuxWaylandKeyboardKey(
         XkbScancode
     );
 
-    tr_button Button = TR_BUTTON_NIL;
-
-    switch (KeySym)
+    if ((KeySym == XKB_KEY_Shift_L) || (KeySym == XKB_KEY_Shift_R))
     {
-        default: break;
-
-        case XKB_KEY_space:         Button = TR_BUTTON_KEY_SPACE; break;
-        case XKB_KEY_Left:          Button = TR_BUTTON_KEY_LEFT; break;
-        case XKB_KEY_Right:         Button = TR_BUTTON_KEY_RIGHT; break;
-        case XKB_KEY_F11:           Button = TR_BUTTON_KEY_F11; break;
-        case XKB_KEY_Control_L:     Button = TR_BUTTON_KEY_CTRL; break;
-        case XKB_KEY_Control_R:     Button = TR_BUTTON_KEY_CTRL; break;
+        trWayland.ShiftDown = IsDown;
     }
 
-    if (Button != TR_BUTTON_NIL)
-        trWayland.IsDown[Button] = IsDown;
+    // NOTE(vak): Button
+    {
+        tr_button Button = TR_BUTTON_NIL;
+
+        switch (KeySym)
+        {
+            default: break;
+
+            case XKB_KEY_space:         Button = TR_BUTTON_KEY_SPACE; break;
+            case XKB_KEY_Left:          Button = TR_BUTTON_KEY_LEFT; break;
+            case XKB_KEY_Right:         Button = TR_BUTTON_KEY_RIGHT; break;
+            case XKB_KEY_F11:           Button = TR_BUTTON_KEY_F11; break;
+            case XKB_KEY_Control_L:     Button = TR_BUTTON_KEY_CTRL; break;
+            case XKB_KEY_Control_R:     Button = TR_BUTTON_KEY_CTRL; break;
+            case XKB_KEY_BackSpace:     Button = TR_BUTTON_KEY_BACKSPACE; break;
+            case XKB_KEY_Delete:        Button = TR_BUTTON_KEY_DELETE; break;
+        }
+
+        if (Button != TR_BUTTON_NIL)
+            trWayland.IsDown[Button] = IsDown;
+    }
+
+    // NOTE(vak): Typed
+    if (IsDown)
+    {
+        char Character = 0;
+
+        switch (KeySym)
+        {
+            default: break;
+
+            case XKB_KEY_space:         Character = ' ';    break;
+            case XKB_KEY_Return:        Character = '\n';   break;
+            case XKB_KEY_Linefeed:      Character = '\n';   break;
+            case XKB_KEY_Tab:           Character = '\t';   break;
+
+            case XKB_KEY_comma:         Character = ',';   break;
+            case XKB_KEY_period:        Character = '.';   break;
+            case XKB_KEY_slash:         Character = '/';   break;
+            case XKB_KEY_minus:         Character = '-';   break;
+            case XKB_KEY_plus:          Character = '+';   break;
+            case XKB_KEY_asterisk:      Character = '*';   break;
+            case XKB_KEY_parenleft:     Character = '(';   break;
+            case XKB_KEY_parenright:    Character = ')';   break;
+            case XKB_KEY_apostrophe:    Character = '\'';   break;
+            case XKB_KEY_ampersand:     Character = '&';   break;
+            case XKB_KEY_percent:       Character = '%';   break;
+            case XKB_KEY_dollar:        Character = '$';   break;
+            case XKB_KEY_numbersign:    Character = '#';   break;
+            case XKB_KEY_quotedbl:      Character = '"';   break;
+            case XKB_KEY_exclam:        Character = '!';   break;
+            case XKB_KEY_colon:         Character = ':';   break;
+            case XKB_KEY_semicolon:     Character = ';';   break;
+            case XKB_KEY_less:          Character = '<';   break;
+            case XKB_KEY_greater:       Character = '>';   break;
+            case XKB_KEY_equal:         Character = '=';   break;
+            case XKB_KEY_question:      Character = '?';   break;
+            case XKB_KEY_at:            Character = '@';   break;
+            case XKB_KEY_bracketleft:   Character = '[';   break;
+            case XKB_KEY_bracketright:  Character = ']';   break;
+            case XKB_KEY_backslash:     Character = '\\';   break;
+            case XKB_KEY_asciicircum:   Character = '^';   break;
+            case XKB_KEY_underscore:    Character = '_';   break;
+            case XKB_KEY_grave:         Character = '`';   break;
+            case XKB_KEY_braceleft:     Character = '{';   break;
+            case XKB_KEY_braceright:    Character = '}';   break;
+            case XKB_KEY_bar:           Character = '|';   break;
+            case XKB_KEY_asciitilde:    Character = '~';   break;
+
+            case XKB_KEY_0: Character = '0'; break;
+            case XKB_KEY_1: Character = '1'; break;
+            case XKB_KEY_2: Character = '2'; break;
+            case XKB_KEY_3: Character = '3'; break;
+            case XKB_KEY_4: Character = '4'; break;
+            case XKB_KEY_5: Character = '5'; break;
+            case XKB_KEY_6: Character = '6'; break;
+            case XKB_KEY_7: Character = '7'; break;
+            case XKB_KEY_8: Character = '8'; break;
+            case XKB_KEY_9: Character = '9'; break;
+
+            case XKB_KEY_KP_0: Character = '0'; break;
+            case XKB_KEY_KP_1: Character = '1'; break;
+            case XKB_KEY_KP_2: Character = '2'; break;
+            case XKB_KEY_KP_3: Character = '3'; break;
+            case XKB_KEY_KP_4: Character = '4'; break;
+            case XKB_KEY_KP_5: Character = '5'; break;
+            case XKB_KEY_KP_6: Character = '6'; break;
+            case XKB_KEY_KP_7: Character = '7'; break;
+            case XKB_KEY_KP_8: Character = '8'; break;
+            case XKB_KEY_KP_9: Character = '9'; break;
+
+            case XKB_KEY_a: Character = 'a'; break;
+            case XKB_KEY_b: Character = 'b'; break;
+            case XKB_KEY_c: Character = 'c'; break;
+            case XKB_KEY_d: Character = 'd'; break;
+            case XKB_KEY_e: Character = 'e'; break;
+            case XKB_KEY_f: Character = 'f'; break;
+            case XKB_KEY_g: Character = 'g'; break;
+            case XKB_KEY_h: Character = 'h'; break;
+            case XKB_KEY_i: Character = 'i'; break;
+            case XKB_KEY_j: Character = 'j'; break;
+            case XKB_KEY_k: Character = 'k'; break;
+            case XKB_KEY_l: Character = 'l'; break;
+            case XKB_KEY_m: Character = 'm'; break;
+            case XKB_KEY_n: Character = 'n'; break;
+            case XKB_KEY_o: Character = 'o'; break;
+            case XKB_KEY_p: Character = 'p'; break;
+            case XKB_KEY_q: Character = 'q'; break;
+            case XKB_KEY_r: Character = 'r'; break;
+            case XKB_KEY_s: Character = 's'; break;
+            case XKB_KEY_t: Character = 't'; break;
+            case XKB_KEY_u: Character = 'u'; break;
+            case XKB_KEY_v: Character = 'v'; break;
+            case XKB_KEY_w: Character = 'w'; break;
+            case XKB_KEY_x: Character = 'x'; break;
+            case XKB_KEY_y: Character = 'y'; break;
+            case XKB_KEY_z: Character = 'z'; break;
+
+            case XKB_KEY_A: Character = 'A'; break;
+            case XKB_KEY_B: Character = 'B'; break;
+            case XKB_KEY_C: Character = 'C'; break;
+            case XKB_KEY_D: Character = 'D'; break;
+            case XKB_KEY_E: Character = 'E'; break;
+            case XKB_KEY_F: Character = 'F'; break;
+            case XKB_KEY_G: Character = 'G'; break;
+            case XKB_KEY_H: Character = 'H'; break;
+            case XKB_KEY_I: Character = 'I'; break;
+            case XKB_KEY_J: Character = 'J'; break;
+            case XKB_KEY_K: Character = 'K'; break;
+            case XKB_KEY_L: Character = 'L'; break;
+            case XKB_KEY_M: Character = 'M'; break;
+            case XKB_KEY_N: Character = 'N'; break;
+            case XKB_KEY_O: Character = 'O'; break;
+            case XKB_KEY_P: Character = 'P'; break;
+            case XKB_KEY_Q: Character = 'Q'; break;
+            case XKB_KEY_R: Character = 'R'; break;
+            case XKB_KEY_S: Character = 'S'; break;
+            case XKB_KEY_T: Character = 'T'; break;
+            case XKB_KEY_U: Character = 'U'; break;
+            case XKB_KEY_V: Character = 'V'; break;
+            case XKB_KEY_W: Character = 'W'; break;
+            case XKB_KEY_X: Character = 'X'; break;
+            case XKB_KEY_Y: Character = 'Y'; break;
+            case XKB_KEY_Z: Character = 'Z'; break;
+        }
+
+        if (Character)
+        {
+            if (trWayland.ShiftDown)
+            {
+                if ((Character >= 'a') && (Character <= 'z'))
+                {
+                    Character -= 32;
+                }
+                else if ((Character >= '0') && (Character <= '9'))
+                {
+                    char Table[11] = ")!@#$%^&*(";
+                    Character = Table[Character - '0'];
+                }
+                else
+                {
+                    switch (Character)
+                    {
+                        default: break;
+
+                        case ';': Character = ':'; break;
+                        case ',': Character = '<'; break;
+                        case '.': Character = '>'; break;
+                        case '`': Character = '~'; break;
+                        case '/': Character = '?'; break;
+                        case '\'': Character = '"'; break;
+                        case '[': Character = '{'; break;
+                        case ']': Character = '}'; break;
+                        case '-': Character = '_'; break;
+                        case '=': Character = '+'; break;
+                    }
+                }
+            }
+
+            if (trWayland.TypedCount < sizeof(trWayland.Typed))
+            {
+                trWayland.Typed[trWayland.TypedCount++] = Character;
+            }
+        }
+    }
 }
 
 tr_func void trLinuxWaylandKeyboardModifiers(
@@ -2031,6 +2243,8 @@ tr_func tr_b32 trLinuxWaylandShouldQuit(void)
 
 tr_func void trLinuxWaylandPollEvents(void)
 {
+    trWayland.TypedCount = 0;
+
     for (tr_button Button = 1; Button < TR_BUTTON_MAX; Button++)
     {
         trWayland.WasDown[Button] = trWayland.IsDown[Button];
@@ -2095,6 +2309,22 @@ tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button)
         return (TR_FALSE);
 
     return trWayland.WasDown[Button];
+}
+
+tr_func tr_usize trLinuxWaylandGetTypedCount(void)
+{
+    tr_usize Result = trWayland.TypedCount;
+    return (Result);
+}
+
+tr_func char trLinuxWaylandGetTypedCharacter(tr_usize Index)
+{
+    char Character = 0;
+
+    if (Index < trWayland.TypedCount)
+        Character = trWayland.Typed[Index];
+
+    return (Character);
 }
 
 #else
@@ -4317,6 +4547,51 @@ tr_func tr_f32 trGetTextLineHeight(void)
     tr_f32 GlyphHeight = 33.0f;
     tr_f32 LineHeightScale = 1.0f;
     tr_f32 Result = GlyphHeight * LineHeightScale;
+
+    return (Result);
+}
+
+tr_func tr_f32 trGetGlyphOffsetX(tr_str Text, tr_usize Offset)
+{
+    TR_ASSERT(Offset <= Text.Size);
+
+    tr_f32 GlyphWidth = 15.0f;
+    tr_f32 Result = 0.0f;
+
+    for (tr_usize Index = 0; Index < Offset; Index++)
+    {
+        char Character = Text.Data[Index];
+
+        if ((Character >= 32) && (Character <= 126))
+        {
+            Result += GlyphWidth;
+        }
+        else if (Character == '\t')
+        { 
+            Result += 4 * GlyphWidth;
+        }
+        else if (Character == '\n')
+        {
+            Result = 0.0f;
+        }
+    }
+
+    return (Result);
+}
+
+tr_func tr_f32 trGetGlyphOffsetY(tr_str Text, tr_usize Offset)
+{
+    TR_ASSERT(Offset <= Text.Size);
+
+    tr_f32 Result = 0.0f;
+
+    for (tr_usize Index = 0; Index < Offset; Index++)
+    {
+        char Character = Text.Data[Index];
+
+        if (Character == '\n')
+            Result += trGetTextLineHeight();
+    }
 
     return (Result);
 }

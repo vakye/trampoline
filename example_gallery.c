@@ -16,6 +16,7 @@ static gallery_entry Entries[] =
     {trStaticStr("art2.png"), trStaticStr("Homutan (pixiv 58914348)"), 0, 0, 0},
     {trStaticStr("art3.png"), trStaticStr("OOZ (pixiv 9763273)"), 0, 0, 0},
     {trStaticStr("art4.png"), trStaticStr("n/a (pixiv 6179964)"), 0, 0, 0},
+    {trStaticStr("art5.png"), trStaticStr("me!"), 0, 0, 0},
 };
 
 static tr_u32 CurrentEntryIndex = 0;
