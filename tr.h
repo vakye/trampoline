@@ -466,6 +466,7 @@ typedef enum
     TR_EVENT_KIND_QUIT,
     TR_EVENT_KIND_RESIZE,
     TR_EVENT_KIND_KEY,
+    TR_EVENT_KIND_UTF8,
 } tr_event_kind;
 
 typedef struct
@@ -483,6 +484,11 @@ typedef struct
             tr_key Key;
             tr_b32 IsDown;
         } Key;
+
+        struct
+        {
+            tr_u32 Codepoint;
+        } UTF8;
     };
 } tr_event;
 

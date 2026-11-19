@@ -51,16 +51,43 @@ void Frame(tr_f32 LastFrameTime)
                 );
             } break;
 
+            case TR_EVENT_KIND_UTF8:
+            {
+                tr_u32 Codepoint = Event.UTF8.Codepoint;
+                char Character = 0;
+
+                if ((Codepoint >= 32) && (Codepoint <= 126))
+                {
+                    Character = Codepoint;
+                }
+                else if ((Codepoint == '\r') || (Codepoint == '\n'))
+                {
+                    Character = '\n';
+                }
+
+                if (Character == 0) break;
+
+                if (App.BufferSize < sizeof(App.Buffer))
+                {
+                    TR_ASSERT(App.Cursor <= App.BufferSize);
+
+                    trMoveMemory(
+                        App.Buffer + App.Cursor + 1,
+                        App.Buffer + App.Cursor,
+                        App.BufferSize - App.Cursor
+                    );
+
+                    App.Buffer[App.Cursor] = Character;
+
+                    App.BufferSize += 1;
+                    App.Cursor += 1;
+                }
+            } break;
+
             case TR_EVENT_KIND_KEY:
             {
                 tr_key Key = Event.Key.Key;
                 tr_b32 IsDown = Event.Key.IsDown;
-
-                trPrintf(
-                    trStr("Key: %u32, %str\n"),
-                    Key,
-                    IsDown ? trStr("Down") : trStr("Up")
-                );
 
                 if (!IsDown) break;
 
@@ -103,29 +130,6 @@ void Frame(tr_f32 LastFrameTime)
                     }
                 }
             } break;
-        }
-    }
-
-    tr_usize TypedCount = trGetTypedCount();
-
-    for (tr_usize Index = 0; Index < TypedCount; Index++)
-    {
-        char Character = trGetTypedCharacter(Index);
-
-        if (App.BufferSize < sizeof(App.Buffer))
-        {
-            TR_ASSERT(App.Cursor <= App.BufferSize);
-
-            trMoveMemory(
-                App.Buffer + App.Cursor + 1,
-                App.Buffer + App.Cursor,
-                App.BufferSize - App.Cursor
-            );
-
-            App.Buffer[App.Cursor] = Character;
-
-            App.BufferSize += 1;
-            App.Cursor += 1;
         }
     }
 
