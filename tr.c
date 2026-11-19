@@ -766,6 +766,48 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X)
 }
 
 /////////////////////////////////////////////////
+// NOTE(vak): Events
+/////////////////////////////////////////////////
+
+typedef struct
+{
+    tr_u32 Count;
+    tr_event Events[512];
+} tr_event_list;
+
+static tr_event_list EventList = {0};
+
+tr_func tr_u32 trGetEventCount(void)
+{
+    return (EventList.Count);
+}
+
+tr_func tr_event trGetEvent(tr_u32 Index)
+{
+    TR_ASSERT(Index <= EventList.Count);
+
+    tr_event Event = EventList.Events[Index];
+    return (Event);
+}
+
+tr_func void trResetEvents(void)
+{
+    EventList.Count = 0;
+}
+
+tr_func tr_event* trAddEvent(tr_event_kind Kind)
+{
+    TR_ASSERT(EventList.Count <= TR_ARRAY_COUNT(EventList.Events));
+
+    tr_event* Event = EventList.Events + EventList.Count++;
+
+    trZeroType(Event);
+    Event->Kind = Kind;
+
+    return (Event);
+}
+
+/////////////////////////////////////////////////
 // NOTE(vak): Windows Implementation
 /////////////////////////////////////////////////
 
@@ -895,6 +937,7 @@ tr_func void trBeginFrame(void)
 {
     trLinux.FrameBegin = trGetWallClock();
 
+    trResetEvents();
     trLinuxWaylandPollEvents();
     trVulkanBeginFrame();
 }
@@ -1289,7 +1332,7 @@ tr_func void trDecommitMemory(void* At, tr_usize Size)
 tr_func void trExit(tr_u8 ExitCode)
 {
     trLinuxSyscall(
-        TR_LINUX_SYSCALL_NR_EXIT,
+        TR_LINUX_SYSCALL_NR_EXIT_GROUP,
         ExitCode,
         0, 0, 0, 0, 0
     );
@@ -1620,6 +1663,11 @@ tr_func void trLinuxWaylandXdgSurfaceConfigure(
 
     trWayland.WindowW = trWayland.TopLevelW;
     trWayland.WindowH = trWayland.TopLevelH;
+
+    tr_event* Event = trAddEvent(TR_EVENT_KIND_RESIZE);
+
+    Event->Resize.SizeX = trWayland.WindowW;
+    Event->Resize.SizeY = trWayland.WindowH;
 }
 
 tr_func void trLinuxWaylandXdgTopLevelConfigure(
@@ -1640,6 +1688,8 @@ tr_func void trLinuxWaylandXdgTopLevelClose(
 )
 {
     trWayland.Quit = TR_TRUE;
+
+    trAddEvent(TR_EVENT_KIND_QUIT);
 }
 
 tr_func void trLinuxWaylandXdgTopLevelConfigureBounds(

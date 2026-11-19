@@ -24,6 +24,32 @@ void Frame(tr_f32 LastFrameTime)
 {
     trSetClearColor(0.0f, 0.0f, 0.0f, 0.5f);
 
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_QUIT:
+            {
+                trExit(0);
+            } break;
+
+            case TR_EVENT_KIND_RESIZE:
+            {
+                trPrintf(
+                    trStr("Resized: %u32 x %u32\n"),
+                    Event.Resize.SizeX,
+                    Event.Resize.SizeY
+                );
+            } break;
+        }
+    }
+
     TR_ASSERT(App.Cursor <= App.BufferSize);
 
     if (trIsButtonPressed(TR_BUTTON_KEY_LEFT))

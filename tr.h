@@ -351,6 +351,34 @@ tr_func void trBeginFrame(void);
 tr_func void trEndFrame(void);
 
 /////////////////////////////////////////////////
+// NOTE(vak): Events
+/////////////////////////////////////////////////
+
+typedef enum
+{
+    TR_EVENT_KIND_NIL       = 0,
+    TR_EVENT_KIND_QUIT,
+    TR_EVENT_KIND_RESIZE,
+} tr_event_kind;
+
+typedef struct
+{
+    tr_event_kind Kind;
+    union
+    {
+        struct
+        {
+            tr_u32 SizeX, SizeY;
+        } Resize;
+    };
+} tr_event;
+
+tr_func tr_u32      trGetEventCount(void);
+tr_func tr_event    trGetEvent(tr_u32 Index);
+tr_func void        trResetEvents(void);
+tr_func tr_event*   trAddEvent(tr_event_kind Kind);
+
+/////////////////////////////////////////////////
 // NOTE(vak): Platform
 /////////////////////////////////////////////////
 
