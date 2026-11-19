@@ -47,6 +47,15 @@ void Frame(tr_f32 LastFrameTime)
                     Event.Resize.SizeY
                 );
             } break;
+
+            case TR_EVENT_KIND_KEY:
+            {
+                trPrintf(
+                    trStr("Key: %u32, %str\n"),
+                    Event.Key.Key,
+                    Event.Key.IsDown ? trStr("Down") : trStr("Up")
+                );
+            } break;
         }
     }
 

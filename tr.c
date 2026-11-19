@@ -1943,6 +1943,120 @@ tr_func void trLinuxWaylandKeyboardKey(
         XkbScancode
     );
 
+    tr_key Key = TR_KEY_NIL;
+
+    switch (KeySym)
+    {
+        default: break;
+
+        case XKB_KEY_a: case XKB_KEY_A: Key = TR_KEY_A; break;
+        case XKB_KEY_b: case XKB_KEY_B: Key = TR_KEY_B; break;
+        case XKB_KEY_c: case XKB_KEY_C: Key = TR_KEY_C; break;
+        case XKB_KEY_d: case XKB_KEY_D: Key = TR_KEY_D; break;
+        case XKB_KEY_e: case XKB_KEY_E: Key = TR_KEY_E; break;
+        case XKB_KEY_f: case XKB_KEY_F: Key = TR_KEY_F; break;
+        case XKB_KEY_g: case XKB_KEY_G: Key = TR_KEY_G; break;
+        case XKB_KEY_h: case XKB_KEY_H: Key = TR_KEY_H; break;
+        case XKB_KEY_i: case XKB_KEY_I: Key = TR_KEY_I; break;
+        case XKB_KEY_j: case XKB_KEY_J: Key = TR_KEY_J; break;
+        case XKB_KEY_k: case XKB_KEY_K: Key = TR_KEY_K; break;
+        case XKB_KEY_m: case XKB_KEY_M: Key = TR_KEY_M; break;
+        case XKB_KEY_n: case XKB_KEY_N: Key = TR_KEY_N; break;
+        case XKB_KEY_l: case XKB_KEY_L: Key = TR_KEY_L; break;
+        case XKB_KEY_o: case XKB_KEY_O: Key = TR_KEY_O; break;
+        case XKB_KEY_p: case XKB_KEY_P: Key = TR_KEY_P; break;
+        case XKB_KEY_q: case XKB_KEY_Q: Key = TR_KEY_Q; break;
+        case XKB_KEY_r: case XKB_KEY_R: Key = TR_KEY_R; break;
+        case XKB_KEY_s: case XKB_KEY_S: Key = TR_KEY_S; break;
+        case XKB_KEY_t: case XKB_KEY_T: Key = TR_KEY_T; break;
+        case XKB_KEY_u: case XKB_KEY_U: Key = TR_KEY_U; break;
+        case XKB_KEY_v: case XKB_KEY_V: Key = TR_KEY_V; break;
+        case XKB_KEY_w: case XKB_KEY_W: Key = TR_KEY_W; break;
+        case XKB_KEY_x: case XKB_KEY_X: Key = TR_KEY_X; break;
+        case XKB_KEY_y: case XKB_KEY_Y: Key = TR_KEY_Y; break;
+        case XKB_KEY_z: case XKB_KEY_Z: Key = TR_KEY_Z; break;
+
+        case XKB_KEY_0: Key = TR_KEY_0; break;
+        case XKB_KEY_1: Key = TR_KEY_1; break;
+        case XKB_KEY_2: Key = TR_KEY_2; break;
+        case XKB_KEY_3: Key = TR_KEY_3; break;
+        case XKB_KEY_4: Key = TR_KEY_4; break;
+        case XKB_KEY_5: Key = TR_KEY_5; break;
+        case XKB_KEY_6: Key = TR_KEY_6; break;
+        case XKB_KEY_7: Key = TR_KEY_7; break;
+        case XKB_KEY_8: Key = TR_KEY_8; break;
+        case XKB_KEY_9: Key = TR_KEY_9; break;
+
+        case XKB_KEY_F1: Key = TR_KEY_F1; break;
+        case XKB_KEY_F2: Key = TR_KEY_F2; break;
+        case XKB_KEY_F3: Key = TR_KEY_F3; break;
+        case XKB_KEY_F4: Key = TR_KEY_F4; break;
+        case XKB_KEY_F5: Key = TR_KEY_F5; break;
+        case XKB_KEY_F6: Key = TR_KEY_F6; break;
+        case XKB_KEY_F7: Key = TR_KEY_F7; break;
+        case XKB_KEY_F8: Key = TR_KEY_F8; break;
+        case XKB_KEY_F9: Key = TR_KEY_F9; break;
+        case XKB_KEY_F10: Key = TR_KEY_F10; break;
+        case XKB_KEY_F11: Key = TR_KEY_F11; break;
+        case XKB_KEY_F12: Key = TR_KEY_F12; break;
+        case XKB_KEY_F13: Key = TR_KEY_F13; break;
+        case XKB_KEY_F14: Key = TR_KEY_F14; break;
+        case XKB_KEY_F15: Key = TR_KEY_F15; break;
+        case XKB_KEY_F16: Key = TR_KEY_F16; break;
+        case XKB_KEY_F17: Key = TR_KEY_F17; break;
+        case XKB_KEY_F18: Key = TR_KEY_F18; break;
+        case XKB_KEY_F19: Key = TR_KEY_F19; break;
+        case XKB_KEY_F20: Key = TR_KEY_F20; break;
+        case XKB_KEY_F21: Key = TR_KEY_F21; break;
+        case XKB_KEY_F22: Key = TR_KEY_F22; break;
+        case XKB_KEY_F23: Key = TR_KEY_F23; break;
+        case XKB_KEY_F24: Key = TR_KEY_F24; break;
+
+        case XKB_KEY_Up: case XKB_KEY_KP_Up: Key = TR_KEY_UP; break;
+        case XKB_KEY_Down: case XKB_KEY_KP_Down: Key = TR_KEY_DOWN; break;
+        case XKB_KEY_Left: case XKB_KEY_KP_Left: Key = TR_KEY_LEFT; break;
+        case XKB_KEY_Right: case XKB_KEY_KP_Right: Key = TR_KEY_RIGHT; break;
+
+        case XKB_KEY_space: Key = TR_KEY_SPACE; break;
+        case XKB_KEY_Tab: Key = TR_KEY_TAB; break;
+        case XKB_KEY_Escape: Key = TR_KEY_ESCAPE; break;
+        case XKB_KEY_Return: Key = TR_KEY_ENTER; break;
+        case XKB_KEY_BackSpace: Key = TR_KEY_BACKSPACE; break;
+        case XKB_KEY_Delete: Key = TR_KEY_DELETE; break;
+        case XKB_KEY_Insert: Key = TR_KEY_INSERT; break;
+        case XKB_KEY_Page_Up: Key = TR_KEY_PAGE_UP; break;
+        case XKB_KEY_Page_Down: Key = TR_KEY_PAGE_DOWN; break;
+        case XKB_KEY_Home: Key = TR_KEY_HOME; break;
+        case XKB_KEY_End: Key = TR_KEY_END; break;
+
+        case XKB_KEY_Shift_L: Key = TR_KEY_SHIFT_LEFT; break;
+        case XKB_KEY_Shift_R: Key = TR_KEY_SHIFT_RIGHT; break;
+        case XKB_KEY_Alt_L: Key = TR_KEY_ALT_LEFT; break;
+        case XKB_KEY_Alt_R: Key = TR_KEY_ALT_RIGHT; break;
+        case XKB_KEY_Control_L: Key = TR_KEY_CTRL_LEFT; break;
+        case XKB_KEY_Control_R: Key = TR_KEY_CTRL_RIGHT; break;
+
+        case XKB_KEY_apostrophe: Key = TR_KEY_APOSTROPHE; break;
+        case XKB_KEY_grave: Key = TR_KEY_GRAVE_ACCENT; break;
+        case XKB_KEY_comma: Key = TR_KEY_COMMA; break;
+        case XKB_KEY_period: Key = TR_KEY_PERIOD; break;
+        case XKB_KEY_slash: Key = TR_KEY_SLASH; break;
+        case XKB_KEY_semicolon: Key = TR_KEY_SEMICOLON; break;
+        case XKB_KEY_bracketleft: Key = TR_KEY_LEFT_SQUARE; break;
+        case XKB_KEY_bracketright: Key = TR_KEY_RIGHT_SQUARE; break;
+        case XKB_KEY_backslash: Key = TR_KEY_BACKSLASH; break;
+        case XKB_KEY_minus: Key = TR_KEY_MINUS; break;
+        case XKB_KEY_equal: Key = TR_KEY_EQUAL; break;
+    }
+
+    if (Key != TR_KEY_NIL)
+    {
+        tr_event* Event = trAddEvent(TR_EVENT_KIND_KEY);
+
+        Event->Key.Key = Key;
+        Event->Key.IsDown = IsDown;
+    }
+
     if ((KeySym == XKB_KEY_Shift_L) || (KeySym == XKB_KEY_Shift_R))
     {
         trWayland.ShiftDown = IsDown;
