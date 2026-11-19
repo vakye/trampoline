@@ -22,6 +22,9 @@ void Setup(void)
 
 void Frame(tr_f32 LastFrameTime)
 {
+    // NOTE(vak): Just in case a nasty oopsie happened.
+    TR_ASSERT(App.Cursor <= App.BufferSize);
+
     trSetClearColor(0.0f, 0.0f, 0.0f, 0.5f);
 
     tr_u32 EventCount = trGetEventCount();
@@ -50,56 +53,56 @@ void Frame(tr_f32 LastFrameTime)
 
             case TR_EVENT_KIND_KEY:
             {
+                tr_key Key = Event.Key.Key;
+                tr_b32 IsDown = Event.Key.IsDown;
+
                 trPrintf(
                     trStr("Key: %u32, %str\n"),
-                    Event.Key.Key,
-                    Event.Key.IsDown ? trStr("Down") : trStr("Up")
+                    Key,
+                    IsDown ? trStr("Down") : trStr("Up")
                 );
+
+                if (!IsDown) break;
+
+                if (Key == TR_KEY_LEFT)
+                {
+                    if (App.Cursor > 0)
+                        App.Cursor -= 1;
+                }
+                else if (Key == TR_KEY_RIGHT)
+                {
+                    if (App.Cursor < App.BufferSize)
+                        App.Cursor += 1;
+                }
+                else if (Key == TR_KEY_BACKSPACE)
+                {
+                    if (App.Cursor > 0)
+                    {
+                        App.Cursor -= 1;
+
+                        trMoveMemory(
+                            App.Buffer + App.Cursor,
+                            App.Buffer + App.Cursor + 1,
+                            App.BufferSize - App.Cursor - 1
+                        );
+
+                        App.BufferSize -= 1;
+                    }
+                }
+                else if (Key == TR_KEY_DELETE)
+                {
+                    if (App.Cursor < App.BufferSize)
+                    {
+                        trMoveMemory(
+                            App.Buffer + App.Cursor,
+                            App.Buffer + App.Cursor + 1,
+                            App.BufferSize - App.Cursor - 1
+                        );
+
+                        App.BufferSize -= 1;
+                    }
+                }
             } break;
-        }
-    }
-
-    TR_ASSERT(App.Cursor <= App.BufferSize);
-
-    if (trIsButtonPressed(TR_BUTTON_KEY_LEFT))
-    {
-        if (App.Cursor > 0)
-            App.Cursor -= 1;
-    }
-
-    if (trIsButtonPressed(TR_BUTTON_KEY_RIGHT))
-    {
-        if (App.Cursor < App.BufferSize)
-            App.Cursor += 1;
-    }
-
-    if (trIsButtonPressed(TR_BUTTON_KEY_BACKSPACE))
-    {
-        if (App.Cursor > 0)
-        {
-            App.Cursor -= 1;
-
-            trMoveMemory(
-                App.Buffer + App.Cursor,
-                App.Buffer + App.Cursor + 1,
-                App.BufferSize - App.Cursor - 1
-            );
-
-            App.BufferSize -= 1;
-        }
-    }
-
-    if (trIsButtonPressed(TR_BUTTON_KEY_DELETE))
-    {
-        if (App.Cursor < App.BufferSize)
-        {
-            trMoveMemory(
-                App.Buffer + App.Cursor,
-                App.Buffer + App.Cursor + 1,
-                App.BufferSize - App.Cursor - 1
-            );
-
-            App.BufferSize -= 1;
         }
     }
 

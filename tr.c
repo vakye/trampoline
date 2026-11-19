@@ -797,9 +797,12 @@ tr_func void trResetEvents(void)
 
 tr_func tr_event* trAddEvent(tr_event_kind Kind)
 {
-    TR_ASSERT(EventList.Count <= TR_ARRAY_COUNT(EventList.Events));
+    static tr_event NilEvent = {0};
 
-    tr_event* Event = EventList.Events + EventList.Count++;
+    tr_event* Event = &NilEvent;
+
+    if (EventList.Count < TR_ARRAY_COUNT(EventList.Events))
+        Event = EventList.Events + EventList.Count++;
 
     trZeroType(Event);
     Event->Kind = Kind;
@@ -1596,6 +1599,13 @@ typedef struct
     tr_b32 ShiftDown;
     tr_u32 TypedCount;
 
+    tr_u32 KeyRepeatDelay; // NOTE(vak): Milliseconds
+    tr_u32 KeyRepeatRate; // NOTE(vak): Times / Second
+
+    tr_b32 IsKeyDown[TR_KEY_COUNT];
+    tr_u32 TimeUntilKeyRepeat[TR_KEY_COUNT]; // NOTE(vak): Milliseconds
+    tr_clock LastPressEventTime[TR_KEY_COUNT];
+
     tr_b32 IsDown[TR_BUTTON_MAX];
     tr_b32 WasDown[TR_BUTTON_MAX];
     char Typed[256];
@@ -2055,6 +2065,14 @@ tr_func void trLinuxWaylandKeyboardKey(
 
         Event->Key.Key = Key;
         Event->Key.IsDown = IsDown;
+
+        trWayland.IsKeyDown[Key] = IsDown;
+
+        if (IsDown)
+        {
+            trWayland.TimeUntilKeyRepeat[Key] = trWayland.KeyRepeatDelay;
+            trWayland.LastPressEventTime[Key] = trGetWallClock();
+        }
     }
 
     if ((KeySym == XKB_KEY_Shift_L) || (KeySym == XKB_KEY_Shift_R))
@@ -2268,6 +2286,8 @@ tr_func void trLinuxWaylandKeyboardRepeatInfo(
     tr_s32 Delay
 )
 {
+    trWayland.KeyRepeatRate = (tr_u32)TR_MAX(0, Rate);
+    trWayland.KeyRepeatDelay = (tr_u32)TR_MAX(0, Delay);
 }
 
 tr_func void trLinuxWaylandSeatCapabilities(
@@ -2415,6 +2435,33 @@ tr_func void trLinuxWaylandPollEvents(void)
     }
 
     wl_display_roundtrip(trWayland.Display);
+
+    // NOTE(vak): Perform key repeat
+
+    for (tr_key Key = 1; Key < TR_KEY_COUNT; Key++)
+    {
+        if (!trWayland.IsKeyDown[Key])
+            continue;
+
+        tr_f64 Threshold = 0.001 * trWayland.TimeUntilKeyRepeat[Key];
+        tr_f64 Elapsed = trGetSecondsElapsed(
+            trWayland.LastPressEventTime[Key],
+            trGetWallClock()
+        );
+
+        if ((Elapsed >= Threshold) && (trWayland.KeyRepeatRate > 0))
+        {
+            tr_event* Event = trAddEvent(TR_EVENT_KIND_KEY);
+
+            Event->Key.Key = Key;
+            Event->Key.IsDown = TR_TRUE;
+
+            tr_u32 RepeatMilliseconds = (tr_u32)(1000.0f / trWayland.KeyRepeatRate);
+
+            trWayland.TimeUntilKeyRepeat[Key] = RepeatMilliseconds;
+            trWayland.LastPressEventTime[Key] = trGetWallClock();
+        }
+    }
 }
 
 tr_func void trLinuxWaylandPresent(void)

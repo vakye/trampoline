@@ -456,6 +456,8 @@ typedef enum
     TR_KEY_BACKSLASH,
     TR_KEY_MINUS,
     TR_KEY_EQUAL,
+
+    TR_KEY_COUNT,
 } tr_key;
 
 typedef enum
