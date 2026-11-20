@@ -1747,6 +1747,35 @@ tr_func void trLinuxWaylandPointerButton(
 )
 {
     tr_b32 IsDown = (State == WL_POINTER_BUTTON_STATE_PRESSED);
+
+    {
+        tr_mouse_button Button = TR_MOUSE_BUTTON_NIL;
+
+        switch (ButtonCode)
+        {
+            default: break;
+
+            // NOTE(vak): From linux/input-event-codes.h
+            //      0x110 = BTN_LEFT
+            //      0x111 = BTN_RIGHT
+            //      0x112 = BTN_MIDDLE
+
+            case 0x110: Button = TR_MOUSE_BUTTON_LEFT; break;
+            case 0x111: Button = TR_MOUSE_BUTTON_RIGHT; break;
+            case 0x112: Button = TR_MOUSE_BUTTON_MIDDLE; break;
+        }
+
+        if (Button != TR_MOUSE_BUTTON_NIL)
+        {
+            tr_event* Event = trAddEvent(TR_EVENT_KIND_MOUSE_BUTTON);
+
+            Event->MouseButton.Button = Button;
+            Event->MouseButton.IsDown = IsDown;
+        }
+    }
+
+    // NOTE(vak): Legacy API
+
     tr_button Button = TR_BUTTON_NIL;
 
     switch (ButtonCode)

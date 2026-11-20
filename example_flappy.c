@@ -31,6 +31,11 @@ typedef struct
     tr_u32 Score;
     tr_b32 Started;
     tr_b32 Over;
+
+    tr_b32 MouseLeftWasDown;
+    tr_b32 MouseLeftIsDown;
+    tr_b32 SpaceWasDown;
+    tr_b32 SpaceIsDown;
 } game;
 
 game Game = {0};
@@ -110,6 +115,38 @@ void Frame(tr_f32 LastFrameTime)
 {
     trResetArena(trGetTemporaryArena());
 
+    Game.MouseLeftWasDown = Game.MouseLeftIsDown;
+    Game.SpaceWasDown = Game.SpaceIsDown;
+
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_MOUSE_BUTTON:
+            {
+                if (Event.MouseButton.Button == TR_MOUSE_BUTTON_LEFT)
+                    Game.MouseLeftIsDown = Event.MouseButton.IsDown;
+            } break;
+
+            case TR_EVENT_KIND_KEY:
+            {
+                if (Event.Key.Key == TR_KEY_SPACE)
+                    Game.SpaceIsDown = Event.Key.IsDown;
+            } break;
+        }
+    }
+
+    tr_b32 MouseLeftPressed = (!Game.MouseLeftWasDown) && (Game.MouseLeftIsDown);
+    tr_b32 SpacePressed = (!Game.SpaceWasDown) && (Game.SpaceIsDown);
+
+    tr_b32 InputInteract = MouseLeftPressed || SpacePressed;
+
     tr_f32 TimeStep = LastFrameTime;
 
     tr_f32 WindowW = trGetWindowWidth();
@@ -117,8 +154,7 @@ void Frame(tr_f32 LastFrameTime)
 
     if (!Game.Started)
     {
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
-            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        if (InputInteract)
         {
             Game.Started = TR_TRUE;
         }
@@ -131,8 +167,7 @@ void Frame(tr_f32 LastFrameTime)
         Game.PlayerDX += Game.PlayerDDX * TimeStep;
         Game.PlayerDY += Game.PlayerDDY * TimeStep;
 
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
-            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        if (InputInteract)
         {
             Game.PlayerDY = -500.0f;
         }
@@ -190,8 +225,7 @@ void Frame(tr_f32 LastFrameTime)
 
     if (Game.Over)
     {
-        if (trIsButtonPressed(TR_BUTTON_MOUSE_LEFT) ||
-            trIsButtonPressed(TR_BUTTON_KEY_SPACE))
+        if (InputInteract)
         {
             GameRestart();
         }

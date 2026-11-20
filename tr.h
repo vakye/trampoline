@@ -462,11 +462,21 @@ typedef enum
 
 typedef enum
 {
+    TR_MOUSE_BUTTON_NIL = 0,
+
+    TR_MOUSE_BUTTON_LEFT,
+    TR_MOUSE_BUTTON_MIDDLE,
+    TR_MOUSE_BUTTON_RIGHT,
+} tr_mouse_button;
+
+typedef enum
+{
     TR_EVENT_KIND_NIL       = 0,
     TR_EVENT_KIND_QUIT,
     TR_EVENT_KIND_RESIZE,
     TR_EVENT_KIND_KEY,
     TR_EVENT_KIND_UNICODE,
+    TR_EVENT_KIND_MOUSE_BUTTON,
 } tr_event_kind;
 
 typedef struct
@@ -489,6 +499,12 @@ typedef struct
         {
             tr_u32 Codepoint;
         } Unicode;
+
+        struct
+        {
+            tr_mouse_button Button;
+            tr_b32 IsDown;
+        } MouseButton;
     };
 } tr_event;
 
