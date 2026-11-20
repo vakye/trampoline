@@ -1975,12 +1975,12 @@ tr_func void trLinuxWaylandSendKeyEvent(
         case XKB_KEY_Escape: Key = TR_KEY_ESCAPE; break;
         case XKB_KEY_Return: Key = TR_KEY_ENTER; break;
         case XKB_KEY_BackSpace: Key = TR_KEY_BACKSPACE; break;
-        case XKB_KEY_Delete: Key = TR_KEY_DELETE; break;
-        case XKB_KEY_Insert: Key = TR_KEY_INSERT; break;
-        case XKB_KEY_Page_Up: Key = TR_KEY_PAGE_UP; break;
-        case XKB_KEY_Page_Down: Key = TR_KEY_PAGE_DOWN; break;
-        case XKB_KEY_Home: Key = TR_KEY_HOME; break;
-        case XKB_KEY_End: Key = TR_KEY_END; break;
+        case XKB_KEY_Delete: case XKB_KEY_KP_Delete: Key = TR_KEY_DELETE; break;
+        case XKB_KEY_Insert: case XKB_KEY_KP_Insert: Key = TR_KEY_INSERT; break;
+        case XKB_KEY_Page_Up: case XKB_KEY_KP_Page_Up: Key = TR_KEY_PAGE_UP; break;
+        case XKB_KEY_Page_Down: case XKB_KEY_KP_Page_Down: Key = TR_KEY_PAGE_DOWN; break;
+        case XKB_KEY_Home: case XKB_KEY_KP_Home: Key = TR_KEY_HOME; break;
+        case XKB_KEY_End: case XKB_KEY_KP_End: Key = TR_KEY_END; break;
 
         case XKB_KEY_Shift_L: Key = TR_KEY_SHIFT_LEFT; break;
         case XKB_KEY_Shift_R: Key = TR_KEY_SHIFT_RIGHT; break;

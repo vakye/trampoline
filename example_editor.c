@@ -1,9 +1,12 @@
 
 #include "tr.h"
 
+#define SPACES_PER_TAB (4)
+
 typedef struct
 {
     tr_u32 Cursor;
+    tr_u32 PreferredColumn;
     tr_u32 BufferSize;
     tr_u8 Buffer[2048];
 } application;
@@ -12,12 +15,151 @@ static application App = {0};
 
 void Setup(void)
 {
-    tr_str Text = trStr("Hello, world!\n");
+}
 
-    App.BufferSize = Text.Size;
-    App.Cursor = Text.Size;
+static void InsertCharacterAt(tr_u32 Offset, char Character)
+{
+    TR_ASSERT(App.BufferSize < TR_ARRAY_COUNT(App.Buffer));
+    TR_ASSERT(Offset <= App.BufferSize);
 
-    trCopyMemory(App.Buffer, Text.Data, Text.Size);
+    trMoveMemory(
+        App.Buffer + Offset + 1,
+        App.Buffer + Offset,
+        App.BufferSize - Offset
+    );
+
+    App.Buffer[Offset] = Character;
+
+    App.BufferSize++;
+}
+
+static void DeleteCharacterAt(tr_u32 Offset)
+{
+    TR_ASSERT(App.BufferSize > 0);
+    TR_ASSERT(Offset < App.BufferSize);
+
+    trMoveMemory(
+        App.Buffer + Offset,
+        App.Buffer + Offset + 1,
+        App.BufferSize - Offset - 1
+    );
+
+    App.BufferSize -= 1;
+}
+
+static tr_u32 SeekLineStartAt(tr_u32 Offset)
+{
+    TR_ASSERT(Offset <= App.BufferSize);
+
+    tr_u32 Result = Offset;
+
+    while (Result > 0)
+    {
+        if (App.Buffer[Result - 1] == '\n')
+            break;
+
+        Result--;
+    }
+
+    return (Result);
+}
+
+static tr_u32 SeekLineEndAt(tr_u32 Offset)
+{
+    TR_ASSERT(Offset <= App.BufferSize);
+
+    tr_u32 Result = Offset;
+
+    while (Result < App.BufferSize)
+    {
+        if (App.Buffer[Result] == '\n')
+            break;
+
+        Result++;
+    }
+
+    return (Result);
+}
+
+static void UpdateCursorPreferredColumn(void)
+{
+    App.PreferredColumn = App.Cursor - SeekLineStartAt(App.Cursor);
+}
+
+static void MoveCursorLeft(void)
+{
+    if (App.Cursor > 0)
+    {
+        App.Cursor -= 1;
+        UpdateCursorPreferredColumn();
+    }
+}
+
+static void MoveCursorRight(void)
+{
+    if (App.Cursor < App.BufferSize)
+    {
+        App.Cursor += 1;
+        UpdateCursorPreferredColumn();
+    }
+}
+
+static void MoveCursorUp(void)
+{
+    tr_u32 ThisLineStart = SeekLineStartAt(App.Cursor);
+
+    if (ThisLineStart > 0)
+    {
+        tr_u32 LastLineEnd = ThisLineStart - 1;
+        tr_u32 LastLineStart = SeekLineStartAt(LastLineEnd);
+        tr_u32 LastLineSize = LastLineEnd - LastLineStart;
+
+        tr_u32 Column = TR_MIN(App.PreferredColumn, LastLineSize);
+
+        App.Cursor = LastLineStart + Column;
+    }
+    else
+    {
+        App.Cursor = 0;
+    }
+}
+
+static void MoveCursorDown(void)
+{
+    tr_u32 ThisLineEnd = SeekLineEndAt(App.Cursor);
+
+    if (ThisLineEnd < App.BufferSize)
+    {
+        tr_u32 NextLineStart = ThisLineEnd + 1;
+        tr_u32 NextLineEnd = SeekLineEndAt(NextLineStart);
+        tr_u32 NextLineSize = NextLineEnd - NextLineStart;
+
+        tr_u32 Column = TR_MIN(App.PreferredColumn, NextLineSize);
+
+        App.Cursor = NextLineStart + Column;
+    }
+    else
+    {
+        App.Cursor = App.BufferSize;
+    }
+}
+
+static void MoveCursorLineStart(void)
+{
+    App.Cursor = SeekLineStartAt(App.Cursor);
+}
+
+static void MoveCursorLineEnd(void)
+{
+    App.Cursor = SeekLineEndAt(App.Cursor);
+}
+
+static void InsertCharacterAtCursor(char Character)
+{
+    TR_ASSERT(App.Cursor <= App.BufferSize);
+
+    InsertCharacterAt(App.Cursor, Character);
+    MoveCursorRight();
 }
 
 void Frame(tr_f32 LastFrameTime)
@@ -61,16 +203,15 @@ void Frame(tr_f32 LastFrameTime)
                 {
                     TR_ASSERT(App.Cursor <= App.BufferSize);
 
-                    trMoveMemory(
-                        App.Buffer + App.Cursor + 1,
-                        App.Buffer + App.Cursor,
-                        App.BufferSize - App.Cursor
-                    );
-
-                    App.Buffer[App.Cursor] = Character;
-
-                    App.BufferSize += 1;
-                    App.Cursor += 1;
+                    if (Character == '\t')
+                    {
+                        for (tr_u32 Index = 0; Index < SPACES_PER_TAB; Index++)
+                            InsertCharacterAtCursor(' ');
+                    }
+                    else
+                    {
+                        InsertCharacterAtCursor(Character);
+                    }
                 }
             } break;
 
@@ -83,40 +224,41 @@ void Frame(tr_f32 LastFrameTime)
 
                 if (Key == TR_KEY_LEFT)
                 {
-                    if (App.Cursor > 0)
-                        App.Cursor -= 1;
+                    MoveCursorLeft();
                 }
                 else if (Key == TR_KEY_RIGHT)
                 {
-                    if (App.Cursor < App.BufferSize)
-                        App.Cursor += 1;
+                    MoveCursorRight();
+                }
+                else if (Key == TR_KEY_UP)
+                {
+                    MoveCursorUp();
+                }
+                else if (Key == TR_KEY_DOWN)
+                {
+                    MoveCursorDown();
+                }
+                else if (Key == TR_KEY_HOME)
+                {
+                    MoveCursorLineStart();
+                }
+                else if (Key == TR_KEY_END)
+                {
+                    MoveCursorLineEnd();
                 }
                 else if (Key == TR_KEY_BACKSPACE)
                 {
                     if (App.Cursor > 0)
                     {
-                        App.Cursor -= 1;
-
-                        trMoveMemory(
-                            App.Buffer + App.Cursor,
-                            App.Buffer + App.Cursor + 1,
-                            App.BufferSize - App.Cursor - 1
-                        );
-
-                        App.BufferSize -= 1;
+                        MoveCursorLeft();
+                        DeleteCharacterAt(App.Cursor);
                     }
                 }
                 else if (Key == TR_KEY_DELETE)
                 {
                     if (App.Cursor < App.BufferSize)
                     {
-                        trMoveMemory(
-                            App.Buffer + App.Cursor,
-                            App.Buffer + App.Cursor + 1,
-                            App.BufferSize - App.Cursor - 1
-                        );
-
-                        App.BufferSize -= 1;
+                        DeleteCharacterAt(App.Cursor);
                     }
                 }
             } break;

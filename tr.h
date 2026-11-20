@@ -332,7 +332,7 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 // frame functions since trampoline already
 // handles that.
 //
-// Otherwise, if you implement TR_CUSTOM_MAIN,
+// Otherwise, if you define TR_CUSTOM_MAIN,
 // then you should implement
 //      int main(int ArgCount, char* Args[])
 //
@@ -340,9 +340,9 @@ tr_func tr_f32 trSquareRootF32(tr_f32 X);
 // by calling trSetup(), trBeginFrame(),
 // trEndFrame(), ...
 //
-// If you don't link with the CRT then you can
-// implement your own entry point and call
-// trSetup(), trBeginFrame(), ... as usual.
+// If you don't link with the CRT, then you can use
+// "trEntryPoint" as the default entry point,
+// which will just call main().
 /////////////////////////////////////////////////
 
 tr_func void trSetup(void);
