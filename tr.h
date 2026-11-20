@@ -539,9 +539,6 @@ tr_func tr_b32 trIsButtonUp(tr_button Button);
 tr_func tr_b32 trIsButtonPressed(tr_button Button);
 tr_func tr_b32 trIsButtonReleased(tr_button Button);
 
-tr_func tr_usize trGetTypedCount(void);
-tr_func char trGetTypedCharacter(tr_usize Index);
-
 typedef struct
 {
     void* Data;
