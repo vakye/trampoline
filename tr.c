@@ -906,8 +906,6 @@ tr_func tr_u32 trLinuxWaylandGetWindowWidth(void);
 tr_func tr_u32 trLinuxWaylandGetWindowHeight(void);
 tr_func tr_f32 trLinuxWaylandGetMouseX(void);
 tr_func tr_f32 trLinuxWaylandGetMouseY(void);
-tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button);
-tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button);
 
 tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
@@ -1020,36 +1018,6 @@ tr_func tr_f32 trGetMouseX(void)
 tr_func tr_f32 trGetMouseY(void)
 {
     tr_f32 Result = trLinuxWaylandGetMouseY();
-    return (Result);
-}
-
-tr_func tr_b32 trIsButtonDown(tr_button Button)
-{
-    tr_b32 Result = trLinuxWaylandIsButtonDown(Button);
-    return (Result);
-}
-
-tr_func tr_b32 trIsButtonUp(tr_button Button)
-{
-    tr_b32 Result = !trIsButtonDown(Button);
-    return (Result);
-}
-
-tr_func tr_b32 trIsButtonPressed(tr_button Button)
-{
-    tr_b32 Result =
-        (TR_TRUE  == trLinuxWaylandIsButtonDown(Button)) &&
-        (TR_FALSE == trLinuxWaylandWasButtonDown(Button));
-
-    return (Result);
-}
-
-tr_func tr_b32 trIsButtonReleased(tr_button Button)
-{
-    tr_b32 Result =
-        (TR_FALSE == trLinuxWaylandIsButtonDown(Button)) &&
-        (TR_TRUE  == trLinuxWaylandWasButtonDown(Button));
-
     return (Result);
 }
 
@@ -1589,10 +1557,6 @@ typedef struct
     tr_u32 DownKeyXkbScancodes[256];
     tr_u32 TimeUntilKeyRepeat[256]; // NOTE(vak): Milliseconds
     tr_clock LastKeyEventTime[256];
-
-    tr_b32 ShiftDown;
-    tr_b32 IsDown[TR_BUTTON_MAX];
-    tr_b32 WasDown[TR_BUTTON_MAX];
 } tr_wayland_state;
 
 static tr_wayland_state trWayland = {0};
@@ -1748,35 +1712,7 @@ tr_func void trLinuxWaylandPointerButton(
 {
     tr_b32 IsDown = (State == WL_POINTER_BUTTON_STATE_PRESSED);
 
-    {
-        tr_mouse_button Button = TR_MOUSE_BUTTON_NIL;
-
-        switch (ButtonCode)
-        {
-            default: break;
-
-            // NOTE(vak): From linux/input-event-codes.h
-            //      0x110 = BTN_LEFT
-            //      0x111 = BTN_RIGHT
-            //      0x112 = BTN_MIDDLE
-
-            case 0x110: Button = TR_MOUSE_BUTTON_LEFT; break;
-            case 0x111: Button = TR_MOUSE_BUTTON_RIGHT; break;
-            case 0x112: Button = TR_MOUSE_BUTTON_MIDDLE; break;
-        }
-
-        if (Button != TR_MOUSE_BUTTON_NIL)
-        {
-            tr_event* Event = trAddEvent(TR_EVENT_KIND_MOUSE_BUTTON);
-
-            Event->MouseButton.Button = Button;
-            Event->MouseButton.IsDown = IsDown;
-        }
-    }
-
-    // NOTE(vak): Legacy API
-
-    tr_button Button = TR_BUTTON_NIL;
+    tr_mouse_button Button = TR_MOUSE_BUTTON_NIL;
 
     switch (ButtonCode)
     {
@@ -1787,13 +1723,18 @@ tr_func void trLinuxWaylandPointerButton(
         //      0x111 = BTN_RIGHT
         //      0x112 = BTN_MIDDLE
 
-        case 0x110: Button = TR_BUTTON_MOUSE_LEFT; break;
-        case 0x111: Button = TR_BUTTON_MOUSE_RIGHT; break;
-        case 0x112: Button = TR_BUTTON_MOUSE_MIDDLE; break;
+        case 0x110: Button = TR_MOUSE_BUTTON_LEFT; break;
+        case 0x111: Button = TR_MOUSE_BUTTON_RIGHT; break;
+        case 0x112: Button = TR_MOUSE_BUTTON_MIDDLE; break;
     }
 
-    if (Button != TR_BUTTON_NIL)
-        trWayland.IsDown[Button] = IsDown;
+    if (Button != TR_MOUSE_BUTTON_NIL)
+    {
+        tr_event* Event = trAddEvent(TR_EVENT_KIND_MOUSE_BUTTON);
+
+        Event->MouseButton.Button = Button;
+        Event->MouseButton.IsDown = IsDown;
+    }
 }
 
 tr_func void trLinuxWaylandPointerAxis(
@@ -2165,38 +2106,6 @@ tr_func void trLinuxWaylandKeyboardKey(
 
     if (IsDown)
         trLinuxWaylandSendUnicodeEvent(XkbScancode);
-
-    xkb_keysym_t KeySym = xkb_state_key_get_one_sym(
-        trWayland.XkbState,
-        XkbScancode
-    );
-
-    if ((KeySym == XKB_KEY_Shift_L) || (KeySym == XKB_KEY_Shift_R))
-    {
-        trWayland.ShiftDown = IsDown;
-    }
-
-    // NOTE(vak): Button
-    {
-        tr_button Button = TR_BUTTON_NIL;
-
-        switch (KeySym)
-        {
-            default: break;
-
-            case XKB_KEY_space:         Button = TR_BUTTON_KEY_SPACE; break;
-            case XKB_KEY_Left:          Button = TR_BUTTON_KEY_LEFT; break;
-            case XKB_KEY_Right:         Button = TR_BUTTON_KEY_RIGHT; break;
-            case XKB_KEY_F11:           Button = TR_BUTTON_KEY_F11; break;
-            case XKB_KEY_Control_L:     Button = TR_BUTTON_KEY_CTRL; break;
-            case XKB_KEY_Control_R:     Button = TR_BUTTON_KEY_CTRL; break;
-            case XKB_KEY_BackSpace:     Button = TR_BUTTON_KEY_BACKSPACE; break;
-            case XKB_KEY_Delete:        Button = TR_BUTTON_KEY_DELETE; break;
-        }
-
-        if (Button != TR_BUTTON_NIL)
-            trWayland.IsDown[Button] = IsDown;
-    }
 }
 
 tr_func void trLinuxWaylandKeyboardModifiers(
@@ -2366,11 +2275,6 @@ tr_func tr_b32 trLinuxWaylandShouldQuit(void)
 
 tr_func void trLinuxWaylandPollEvents(void)
 {
-    for (tr_button Button = 1; Button < TR_BUTTON_MAX; Button++)
-    {
-        trWayland.WasDown[Button] = trWayland.IsDown[Button];
-    }
-
     wl_display_roundtrip(trWayland.Display);
 
     // NOTE(vak): Perform key repeat
@@ -2438,22 +2342,6 @@ tr_func tr_f32 trLinuxWaylandGetMouseY(void)
 {
     tr_f32 Result = trWayland.MouseY;
     return (Result);
-}
-
-tr_func tr_b32 trLinuxWaylandIsButtonDown(tr_button Button)
-{
-    if ((Button == TR_BUTTON_NIL) || (Button >= TR_BUTTON_MAX))
-        return (TR_FALSE);
-
-    return trWayland.IsDown[Button];
-}
-
-tr_func tr_b32 trLinuxWaylandWasButtonDown(tr_button Button)
-{
-    if ((Button == TR_BUTTON_NIL) || (Button >= TR_BUTTON_MAX))
-        return (TR_FALSE);
-
-    return trWayland.WasDown[Button];
 }
 
 #else

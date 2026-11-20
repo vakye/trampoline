@@ -6,6 +6,8 @@ typedef tr_u32 ui_id;
 static ui_id ActiveElementID = 0;
 static ui_id HoveringElementID = 0;
 
+static tr_b32 MouseLeftDown = TR_FALSE;
+
 static tr_b32 ButtonUI(ui_id ID, tr_f32 X, tr_f32 Y, tr_f32 W, tr_f32 H, tr_f32 R, tr_f32 G, tr_f32 B, tr_f32 A)
 {
     tr_f32 MouseX = trGetMouseX();
@@ -22,7 +24,7 @@ static tr_b32 ButtonUI(ui_id ID, tr_f32 X, tr_f32 Y, tr_f32 W, tr_f32 H, tr_f32 
 
     tr_b32 Triggered = TR_FALSE;
 
-    if (trIsButtonDown(TR_BUTTON_MOUSE_LEFT))
+    if (MouseLeftDown)
     {
         if (!ActiveElementID && Hovering)
             ActiveElementID = ID;
@@ -58,6 +60,26 @@ void Setup(void)
 void Frame(tr_f32 LastFrameTime)
 {
     trResetArena(trGetTemporaryArena());
+
+    {
+        tr_u32 EventCount = trGetEventCount();
+
+        for (tr_u32 Index = 0; Index < EventCount; Index++)
+        {
+            tr_event Event = trGetEvent(Index);
+
+            switch (Event.Kind)
+            {
+                default: break;
+
+                case TR_EVENT_KIND_MOUSE_BUTTON:
+                {
+                    if (Event.MouseButton.Button == TR_MOUSE_BUTTON_LEFT)
+                        MouseLeftDown = Event.MouseButton.IsDown;
+                } break;
+            }
+        }
+    }
 
     {
         HoveringElementID = 0;

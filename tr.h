@@ -527,34 +527,6 @@ tr_func tr_u32 trGetWindowHeight(void);
 tr_func tr_f32 trGetMouseX(void);
 tr_func tr_f32 trGetMouseY(void);
 
-typedef enum
-{
-    TR_BUTTON_NIL = 0,
-
-    TR_BUTTON_MOUSE_LEFT,
-    TR_BUTTON_MOUSE_RIGHT,
-    TR_BUTTON_MOUSE_MIDDLE,
-
-    TR_BUTTON_KEY_SPACE,
-
-    TR_BUTTON_KEY_LEFT,
-    TR_BUTTON_KEY_RIGHT,
-
-    TR_BUTTON_KEY_BACKSPACE,
-    TR_BUTTON_KEY_DELETE,
-
-    TR_BUTTON_KEY_F11,
-
-    TR_BUTTON_KEY_CTRL,
-
-    TR_BUTTON_MAX,
-} tr_button;
-
-tr_func tr_b32 trIsButtonDown(tr_button Button);
-tr_func tr_b32 trIsButtonUp(tr_button Button);
-tr_func tr_b32 trIsButtonPressed(tr_button Button);
-tr_func tr_b32 trIsButtonReleased(tr_button Button);
-
 typedef struct
 {
     void* Data;

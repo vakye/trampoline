@@ -19,9 +19,28 @@ void Setup(void)
 
 void Frame(tr_f32 LastFrameTime)
 {
+    static tr_b32 MouseLeftIsDown = TR_FALSE;
     static tr_b32 Picking = TR_FALSE;
     static tr_f32 PickedRelativeX = 0.0f;
     static tr_f32 PickedRelativeY = 0.0f;
+
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_MOUSE_BUTTON:
+            {
+                if (Event.MouseButton.Button == TR_MOUSE_BUTTON_LEFT)
+                    MouseLeftIsDown = Event.MouseButton.IsDown;
+            } break;
+        }
+    }
 
     tr_f32 MouseX = trGetMouseX();
     tr_f32 MouseY = trGetMouseY();
@@ -32,7 +51,7 @@ void Frame(tr_f32 LastFrameTime)
         (MouseX < (X + SizeX)) &&
         (MouseY < (Y + SizeY));
 
-    if (trIsButtonDown(TR_BUTTON_MOUSE_LEFT))
+    if (MouseLeftIsDown)
     {
         if (Hovering && !Picking)
         {

@@ -11,6 +11,9 @@ static tr_b32   UI_Button       (ui_id ID, tr_str Text);
 static void     UI_Checkbox     (ui_id ID, tr_str Text, tr_b32* State);
 static void     UI_EndWindow    (void);
 
+static tr_b32 MouseLeftWasDown = TR_FALSE;
+static tr_b32 MouseLeftIsDown = TR_FALSE;
+
 void Setup(void)
 {
     UI_Setup();
@@ -19,6 +22,26 @@ void Setup(void)
 void Frame(tr_f32 LastFrameTime)
 {
     trResetArena(trGetTemporaryArena());
+
+    MouseLeftWasDown = MouseLeftIsDown;
+
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_MOUSE_BUTTON:
+            {
+                if (Event.MouseButton.Button == TR_MOUSE_BUTTON_LEFT)
+                    MouseLeftIsDown = Event.MouseButton.IsDown;
+            } break;
+        }
+    }
 
     // NOTE(vak): Gives a nice opaque background on platforms
     // where transparent windows are supported (Linux wayland, ...)
@@ -259,9 +282,9 @@ static tr_b32 UI_Button(ui_id ID, tr_str Text)
     tr_f32 MouseX = trGetMouseX();
     tr_f32 MouseY = trGetMouseY();
 
-    tr_b32 LeftDown     = trIsButtonDown(TR_BUTTON_MOUSE_LEFT);
-    tr_b32 LeftPressed  = trIsButtonPressed(TR_BUTTON_MOUSE_LEFT);
-    tr_b32 LeftReleased = trIsButtonReleased(TR_BUTTON_MOUSE_LEFT);
+    tr_b32 LeftDown     = MouseLeftIsDown;
+    tr_b32 LeftPressed  = (!MouseLeftWasDown) && (MouseLeftIsDown);
+    tr_b32 LeftReleased = (MouseLeftWasDown) && (!MouseLeftIsDown);
 
     tr_b32 Hovering =
         (MouseX > Element->X) &&
@@ -360,9 +383,9 @@ static void UI_Checkbox(ui_id ID, tr_str Text, tr_b32* State)
     tr_f32 MouseX = trGetMouseX();
     tr_f32 MouseY = trGetMouseY();
 
-    tr_b32 LeftDown     = trIsButtonDown(TR_BUTTON_MOUSE_LEFT);
-    tr_b32 LeftPressed  = trIsButtonPressed(TR_BUTTON_MOUSE_LEFT);
-    tr_b32 LeftReleased = trIsButtonReleased(TR_BUTTON_MOUSE_LEFT);
+    tr_b32 LeftDown     = MouseLeftIsDown;
+    tr_b32 LeftPressed  = (!MouseLeftWasDown) && (MouseLeftIsDown);
+    tr_b32 LeftReleased = (MouseLeftWasDown) && (!MouseLeftIsDown);
 
     tr_b32 Hovering =
         (MouseX > Element->X) &&

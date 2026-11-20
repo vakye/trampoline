@@ -65,16 +65,42 @@ void Frame(tr_f32 LastFrameTime)
 
     gallery_entry* Entry = Entries + CurrentEntryIndex;
 
-    if (trIsButtonPressed(TR_BUTTON_KEY_F11))
+    tr_b32 KeyF11Pressed = TR_FALSE;
+    tr_b32 KeyLeftPressed = TR_FALSE;
+    tr_b32 KeyRightPressed = TR_FALSE;
+
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_KEY:
+            {
+                tr_key Key = Event.Key.Key;
+                tr_b32 IsDown = Event.Key.IsDown;
+
+                if (Key == TR_KEY_F11)          KeyF11Pressed = IsDown;
+                else if (Key == TR_KEY_LEFT)    KeyLeftPressed = IsDown;
+                else if (Key == TR_KEY_RIGHT)   KeyRightPressed = IsDown;
+            } break;
+        }
+    }
+
+    if (KeyF11Pressed)
         trToggleFullscreen();
 
-    if (trIsButtonPressed(TR_BUTTON_KEY_LEFT))
+    if (KeyLeftPressed)
     {
         if (CurrentEntryIndex == 0) CurrentEntryIndex = TR_ARRAY_COUNT(Entries) - 1;
         else                        CurrentEntryIndex -= 1;
     }
 
-    if (trIsButtonPressed(TR_BUTTON_KEY_RIGHT))
+    if (KeyRightPressed)
     {
         CurrentEntryIndex += 1;
         CurrentEntryIndex %= TR_ARRAY_COUNT(Entries);

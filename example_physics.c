@@ -47,6 +47,26 @@ void Frame(tr_f32 LastFrameTime)
 
     // NOTE(vak): Do mouse picking
 
+    static tr_b32 MouseLeftDown = TR_FALSE;
+
+    tr_u32 EventCount = trGetEventCount();
+
+    for (tr_u32 Index = 0; Index < EventCount; Index++)
+    {
+        tr_event Event = trGetEvent(Index);
+
+        switch (Event.Kind)
+        {
+            default: break;
+
+            case TR_EVENT_KIND_MOUSE_BUTTON:
+            {
+                if (Event.MouseButton.Button == TR_MOUSE_BUTTON_LEFT)
+                    MouseLeftDown = Event.MouseButton.IsDown;
+            } break;
+        }
+    }
+
     static body* PickingBody = 0;
 
     tr_f32 MouseX = trGetMouseX();
@@ -70,7 +90,7 @@ void Frame(tr_f32 LastFrameTime)
             HoveringBody = Body;
     }
 
-    if (trIsButtonDown(TR_BUTTON_MOUSE_LEFT))
+    if (MouseLeftDown)
     {
         if (HoveringBody && !PickingBody)
             PickingBody = HoveringBody;
