@@ -466,7 +466,7 @@ typedef enum
     TR_EVENT_KIND_QUIT,
     TR_EVENT_KIND_RESIZE,
     TR_EVENT_KIND_KEY,
-    TR_EVENT_KIND_UTF8,
+    TR_EVENT_KIND_UNICODE,
 } tr_event_kind;
 
 typedef struct
@@ -488,7 +488,7 @@ typedef struct
         struct
         {
             tr_u32 Codepoint;
-        } UTF8;
+        } Unicode;
     };
 } tr_event;
 

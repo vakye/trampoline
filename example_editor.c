@@ -37,23 +37,9 @@ void Frame(tr_f32 LastFrameTime)
         {
             default: break;
 
-            case TR_EVENT_KIND_QUIT:
+            case TR_EVENT_KIND_UNICODE:
             {
-                trExit(0);
-            } break;
-
-            case TR_EVENT_KIND_RESIZE:
-            {
-                trPrintf(
-                    trStr("Resized: %u32 x %u32\n"),
-                    Event.Resize.SizeX,
-                    Event.Resize.SizeY
-                );
-            } break;
-
-            case TR_EVENT_KIND_UTF8:
-            {
-                tr_u32 Codepoint = Event.UTF8.Codepoint;
+                tr_u32 Codepoint = Event.Unicode.Codepoint;
                 char Character = 0;
 
                 if ((Codepoint >= 32) && (Codepoint <= 126))
@@ -63,6 +49,10 @@ void Frame(tr_f32 LastFrameTime)
                 else if ((Codepoint == '\r') || (Codepoint == '\n'))
                 {
                     Character = '\n';
+                }
+                else if (Codepoint == '\t')
+                {
+                    Character = '\t';
                 }
 
                 if (Character == 0) break;
@@ -143,8 +133,6 @@ void Frame(tr_f32 LastFrameTime)
         PadX, PadY,
         0.9f, 0.9f, 0.9f, 1.0f
     );
-
-    TR_ASSERT(App.Cursor <= App.BufferSize);
 
     tr_f32 CursorSizeX = 15.0f;
     tr_f32 CursorSizeY = 33.0f;

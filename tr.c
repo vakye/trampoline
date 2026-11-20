@@ -2078,7 +2078,7 @@ tr_func void trLinuxWaylandKeyboardKey(
         }
     }
 
-    // NOTE(vak): Send UTF8 event
+    // NOTE(vak): Send Unicode event
     if (IsDown)
     {
         char Buffer[8] = {0};
@@ -2109,9 +2109,9 @@ tr_func void trLinuxWaylandKeyboardKey(
             Codepoint = (tr_u32)(Buffer[0] & 0x7F);
         }
 
-        tr_event* Event = trAddEvent(TR_EVENT_KIND_UTF8);
+        tr_event* Event = trAddEvent(TR_EVENT_KIND_UNICODE);
 
-        Event->UTF8.Codepoint = Codepoint;
+        Event->Unicode.Codepoint = Codepoint;
     }
 
     if ((KeySym == XKB_KEY_Shift_L) || (KeySym == XKB_KEY_Shift_R))
