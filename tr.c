@@ -537,7 +537,7 @@ tr_func tr_str trVFormatWithArena(tr_arena* Arena, tr_str Format, va_list ArgLis
 
             tr_usize DigitCount = BufferCount - Begin;
 
-            for (tr_usize Index = 0; Index <= DigitCount/2; Index++)
+            for (tr_usize Index = 0; Index < DigitCount/2; Index++)
             {
                 tr_usize A = Index;
                 tr_usize B = DigitCount - Index - 1;
