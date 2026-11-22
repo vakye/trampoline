@@ -1989,17 +1989,17 @@ tr_func void trLinuxWaylandSendKeyEvent(
         case XKB_KEY_Control_L: Key = TR_KEY_CTRL_LEFT; break;
         case XKB_KEY_Control_R: Key = TR_KEY_CTRL_RIGHT; break;
 
-        case XKB_KEY_apostrophe: Key = TR_KEY_APOSTROPHE; break;
-        case XKB_KEY_grave: Key = TR_KEY_GRAVE_ACCENT; break;
-        case XKB_KEY_comma: Key = TR_KEY_COMMA; break;
-        case XKB_KEY_period: Key = TR_KEY_PERIOD; break;
-        case XKB_KEY_slash: Key = TR_KEY_SLASH; break;
-        case XKB_KEY_semicolon: Key = TR_KEY_SEMICOLON; break;
-        case XKB_KEY_bracketleft: Key = TR_KEY_LEFT_SQUARE; break;
-        case XKB_KEY_bracketright: Key = TR_KEY_RIGHT_SQUARE; break;
-        case XKB_KEY_backslash: Key = TR_KEY_BACKSLASH; break;
-        case XKB_KEY_minus: Key = TR_KEY_MINUS; break;
-        case XKB_KEY_equal: Key = TR_KEY_EQUAL; break;
+        case XKB_KEY_apostrophe: case XKB_KEY_quotedbl: Key = TR_KEY_APOSTROPHE; break;
+        case XKB_KEY_grave: case XKB_KEY_asciitilde: Key = TR_KEY_GRAVE_ACCENT; break;
+        case XKB_KEY_comma: case XKB_KEY_less: Key = TR_KEY_COMMA; break;
+        case XKB_KEY_period: case XKB_KEY_greater: Key = TR_KEY_PERIOD; break;
+        case XKB_KEY_slash: case XKB_KEY_question: Key = TR_KEY_SLASH; break;
+        case XKB_KEY_semicolon: case XKB_KEY_colon: Key = TR_KEY_SEMICOLON; break;
+        case XKB_KEY_bracketleft: case XKB_KEY_braceleft: Key = TR_KEY_LEFT_SQUARE; break;
+        case XKB_KEY_bracketright: case XKB_KEY_braceright: Key = TR_KEY_RIGHT_SQUARE; break;
+        case XKB_KEY_backslash: case XKB_KEY_bar: Key = TR_KEY_BACKSLASH; break;
+        case XKB_KEY_minus: case XKB_KEY_underscore: Key = TR_KEY_MINUS; break;
+        case XKB_KEY_equal: case XKB_KEY_plus: Key = TR_KEY_EQUAL; break;
     }
 
     if (Key != TR_KEY_NIL)

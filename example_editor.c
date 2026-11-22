@@ -54,6 +54,11 @@ static tr_u32 SeekLineEndAt(tr_u32 Offset);
 static void UpdateCursorPreferredColumn(void);
 static void InsertCharacterAtCursor(char Character);
 
+static tr_b32 IsWhitespace(char Character);
+static tr_b32 IsAlphabet(char Character);
+static tr_b32 IsDigit(char Character);
+static tr_b32 IsPunctuation(char Character);
+
 // NOTE(vak): Actions
 
 static void ToggleEditorMode(void);
@@ -66,6 +71,8 @@ static void MoveCursorLineStart(void);
 static void MoveCursorLineEnd(void);
 static void MoveCursorPrevParagraph(void);
 static void MoveCursorNextParagraph(void);
+static void MoveCursorPrevWord(void);
+static void MoveCursorNextWord(void);
 static void DeleteBackward(void);
 static void DeleteForward(void);
 static void DeleteCurrentLine(void);
@@ -120,6 +127,8 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
 
             case TR_KEY_O:              MoveCursorPrevParagraph(); break;
             case TR_KEY_L:              MoveCursorNextParagraph(); break;
+            case TR_KEY_K:              MoveCursorPrevWord(); break;
+            case TR_KEY_SEMICOLON:      MoveCursorNextWord(); break;
 
             case TR_KEY_Q:              ToggleEditorMode(); break;
             case TR_KEY_W:              ToggleEditorModeAndNewLineBelow(); break;
@@ -484,6 +493,48 @@ static void UpdateCursorPreferredColumn(void)
     App.PreferredColumn = App.Cursor - SeekLineStartAt(App.Cursor);
 }
 
+static tr_b32 IsWhitespace(char Character)
+{
+    tr_b32 Result =
+        (Character == ' ') ||
+        (Character == '\t') ||
+        (Character == '\r') ||
+        (Character == '\n');
+
+    return (Result);
+}
+
+static tr_b32 IsAlphabet(char Character)
+{
+    tr_b32 Result =
+        ((Character >= 'a') && (Character <= 'z')) ||
+        ((Character >= 'A') && (Character <= 'Z'));
+
+    return (Result);
+}
+
+static tr_b32 IsDigit(char Character)
+{
+    tr_b32 Result = ((Character >= '0') && (Character <= '9'));
+    return (Result);
+}
+
+static tr_b32 IsPunctuation(char Character)
+{
+    tr_b32 NotControlCode   = ((Character >= 32) && (Character <= 126));
+    tr_b32 NotDigit         = !IsDigit(Character);
+    tr_b32 NotAlphabet      = !IsAlphabet(Character);
+    tr_b32 NotWhitespace    = !IsWhitespace(Character);
+
+    tr_b32 Result =
+        (NotControlCode) &&
+        (NotDigit) &&
+        (NotAlphabet) &&
+        (NotWhitespace);
+
+    return (Result);
+}
+
 // NOTE(vak): Actions implementation
 
 static void ToggleEditorMode(void)
@@ -681,6 +732,72 @@ static void MoveCursorNextParagraph(void)
     }
 
     MoveCursorLineEnd();
+}
+
+static void MoveCursorPrevWord(void)
+{
+    if (App.Cursor > 0)
+    {
+        char Character = App.Buffer[App.Cursor - 1];
+
+        tr_b32 Punctuation  = IsPunctuation(Character);
+        tr_b32 Whitespace   = IsWhitespace(Character);
+        tr_b32 Alphabet     = IsAlphabet(Character);
+        tr_b32 Digit        = IsDigit(Character);
+
+        App.Cursor--;
+
+        while (App.Cursor > 0)
+        {
+            Character = App.Buffer[App.Cursor - 1];
+
+            tr_b32 KeepGoing = TR_FALSE;
+
+            KeepGoing |= (Punctuation  && IsPunctuation(Character));
+            KeepGoing |= (Whitespace   && IsWhitespace(Character));
+            KeepGoing |= (Alphabet     && IsAlphabet(Character));
+            KeepGoing |= (Digit        && IsDigit(Character));
+
+            if (!KeepGoing)
+                break;
+
+            App.Cursor--;
+        }
+
+        UpdateCursorPreferredColumn();
+    }
+}
+
+static void MoveCursorNextWord(void)
+{
+    if (App.Cursor < App.BufferSize)
+    {
+        char Character = App.Buffer[App.Cursor];
+
+        tr_b32 Punctuation  = IsPunctuation(Character);
+        tr_b32 Whitespace   = IsWhitespace(Character);
+        tr_b32 Alphabet     = IsAlphabet(Character);
+        tr_b32 Digit        = IsDigit(Character);
+
+        while (App.Cursor < App.BufferSize)
+        {
+            Character = App.Buffer[App.Cursor];
+
+            tr_b32 KeepGoing = TR_FALSE;
+
+            KeepGoing |= (Punctuation  && IsPunctuation(Character));
+            KeepGoing |= (Whitespace   && IsWhitespace(Character));
+            KeepGoing |= (Alphabet     && IsAlphabet(Character));
+            KeepGoing |= (Digit        && IsDigit(Character));
+
+            if (!KeepGoing)
+                break;
+
+            App.Cursor++;
+        }
+
+        UpdateCursorPreferredColumn();
+    }
 }
 
 static void DeleteBackward(void)
