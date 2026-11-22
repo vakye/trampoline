@@ -24,6 +24,7 @@ typedef struct
     editor_mode EditorMode;
 
     tr_u32 Cursor;
+    tr_u32 Mark;
     tr_u32 PreferredColumn;
 
     tr_u32 BufferSize;
@@ -38,6 +39,20 @@ typedef struct
 
     tr_f32 ViewTargetOffsetX;
     tr_f32 ViewTargetOffsetY;
+
+    // NOTE(vak): Cursor positions
+
+    tr_f32 CursorOffsetX;
+    tr_f32 CursorOffsetY;
+
+    tr_f32 CursorTargetOffsetX;
+    tr_f32 CursorTargetOffsetY;
+
+    tr_f32 MarkOffsetX;
+    tr_f32 MarkOffsetY;
+
+    tr_f32 MarkTargetOffsetX;
+    tr_f32 MarkTargetOffsetY;
 } application;
 
 // NOTE(vak): Buffer
@@ -53,6 +68,7 @@ static tr_u32 SeekLineEndAt(tr_u32 Offset);
 
 static void UpdateCursorPreferredColumn(void);
 static void InsertCharacterAtCursor(char Character);
+static void ClampCursorAndMark(void);
 
 static tr_b32 IsWhitespace(char Character);
 static tr_b32 IsAlphabet(char Character);
@@ -62,20 +78,30 @@ static tr_b32 IsPunctuation(char Character);
 // NOTE(vak): Actions
 
 static void ToggleEditorMode(void);
+static void ToggleEditorModeAndNewLineAbove(void);
 static void ToggleEditorModeAndNewLineBelow(void);
+
+static void AnchorMarkAtCursor(void);
+static void DeleteMarkedRange(void);
+
 static void MoveCursorLeft(void);
 static void MoveCursorRight(void);
 static void MoveCursorUp(void);
 static void MoveCursorDown(void);
+
 static void MoveCursorLineStart(void);
 static void MoveCursorLineEnd(void);
+
 static void MoveCursorPrevParagraph(void);
 static void MoveCursorNextParagraph(void);
+
 static void MoveCursorPrevWord(void);
 static void MoveCursorNextWord(void);
+
 static void DeleteBackward(void);
 static void DeleteForward(void);
 static void DeleteCurrentLine(void);
+
 static void StartNewLine(void);
 static void InsertTabulation(void);
 
@@ -132,8 +158,22 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
 
             case TR_KEY_Q:              ToggleEditorMode(); break;
             case TR_KEY_W:              ToggleEditorModeAndNewLineBelow(); break;
+            case TR_KEY_E:              ToggleEditorModeAndNewLineAbove(); break;
 
             case TR_KEY_D:              DeleteCurrentLine(); break;
+
+            case TR_KEY_SPACE:          AnchorMarkAtCursor(); break;
+        }
+    }
+    else if (App.ModifierFlags == MODIFIER_FLAG_CTRL)
+    {
+        // NOTE(vak): *Only* ctrl down
+
+        switch (Key)
+        {
+            default: break;
+
+            case TR_KEY_D:              DeleteMarkedRange(); break;
         }
     }
 }
@@ -167,6 +207,7 @@ static void EditorInsertModeOnKeyDown(tr_key Key)
 
             case TR_KEY_Q:              ToggleEditorMode(); break;
             case TR_KEY_ENTER:          StartNewLine(); break;
+            case TR_KEY_BACKSPACE:      DeleteBackward(); break;
             case TR_KEY_TAB:            InsertTabulation(); break;
         }
     }
@@ -175,9 +216,6 @@ static void EditorInsertModeOnKeyDown(tr_key Key)
 
 void Frame(tr_f32 LastFrameTime)
 {
-    // NOTE(vak): Just in case a nasty oopsie happened.
-    TR_ASSERT(App.Cursor <= App.BufferSize);
-
     // NOTE(vak): Only allow character typing if the editor
     // mode is set to EDITOR_MODE_INSERT at the start of the
     // frame. This is to prevent insertion when the editor mode
@@ -190,6 +228,8 @@ void Frame(tr_f32 LastFrameTime)
 
     for (tr_u32 Index = 0; Index < EventCount; Index++)
     {
+        ClampCursorAndMark();
+
         tr_event Event = trGetEvent(Index);
 
         switch (Event.Kind)
@@ -266,13 +306,32 @@ void Frame(tr_f32 LastFrameTime)
         }
     }
 
+    ClampCursorAndMark();
+
     tr_str BufferText = trStrData((char*)App.Buffer, App.BufferSize);
 
-    tr_f32 CursorRelativeX = trGetGlyphOffsetX(BufferText, App.Cursor);
-    tr_f32 CursorRelativeY = trGetGlyphOffsetY(BufferText, App.Cursor);
+    // NOTE(vak): Cursor animation
+
+    {
+        App.CursorTargetOffsetX = trGetGlyphOffsetX(BufferText, App.Cursor);
+        App.CursorTargetOffsetY = trGetGlyphOffsetY(BufferText, App.Cursor);
+
+        App.CursorOffsetX += 0.5f * (App.CursorTargetOffsetX - App.CursorOffsetX);
+        App.CursorOffsetY += 0.5f * (App.CursorTargetOffsetY - App.CursorOffsetY);
+    }
+
+    {
+        App.MarkTargetOffsetX = trGetGlyphOffsetX(BufferText, App.Mark);
+        App.MarkTargetOffsetY = trGetGlyphOffsetY(BufferText, App.Mark);
+
+        App.MarkOffsetX += 0.5f * (App.MarkTargetOffsetX - App.MarkOffsetX);
+        App.MarkOffsetY += 0.5f * (App.MarkTargetOffsetY - App.MarkOffsetY);
+    }
 
     // NOTE(vak): Perform horizontal scrolling
     {
+        tr_f32 CursorRelativeX = App.CursorTargetOffsetX;
+
         tr_f32 WindowSizeX = trGetWindowWidth();
         tr_f32 Threshold = TR_MIN(WindowSizeX, 30.0f); // NOTE(vak): About same size as cursor
 
@@ -296,6 +355,8 @@ void Frame(tr_f32 LastFrameTime)
 
     // NOTE(vak): Perform vertical scrolling
     {
+        tr_f32 CursorRelativeY = App.CursorTargetOffsetY;
+
         tr_f32 LineHeight = trGetTextLineHeight();
         tr_u32 LinesInView = (tr_u32)(trGetWindowHeight() / LineHeight);
 
@@ -342,42 +403,151 @@ void Frame(tr_f32 LastFrameTime)
         App.ViewOffsetY += 0.2f * (App.ViewTargetOffsetY - App.ViewOffsetY);
     }
 
-    tr_f32 OffsetX = 4 - App.ViewOffsetX;
-    tr_f32 OffsetY = 4 - App.ViewOffsetY;
+    tr_f32 EditorOffsetX = 4 - App.ViewOffsetX;
+    tr_f32 EditorOffsetY = 4 - App.ViewOffsetY;
+
+    // NOTE(vak): Draw editor text
 
     trText2D(
         BufferText,
-        OffsetX, OffsetY,
+        EditorOffsetX, EditorOffsetY,
         0.9f, 0.9f, 0.9f, 1.0f
     );
 
-    tr_f32 CursorSizeX = 15.0f;
-    tr_f32 CursorSizeY = 33.0f;
+    // NOTE(vak): Draw editor cursor
 
-    tr_f32 CursorR = 1.0f;
-    tr_f32 CursorG = 0.8f;
-    tr_f32 CursorB = 0.5f;
-    tr_f32 CursorA = 0.75f;
-
-    if (App.EditorMode == EDITOR_MODE_INSERT)
+    if (App.EditorMode == EDITOR_MODE_NORMAL)
     {
-        CursorSizeX = 5.0f;
-        CursorR = 0.3f;
-        CursorG = 0.6f;
-        CursorB = 0.9f;
-        CursorA = 0.9f;
+        tr_f32 MarkR = 0.8f;
+        tr_f32 MarkG = 0.9f;
+        tr_f32 MarkB = 0.7f;
+        tr_f32 MarkA = 0.9f;
+
+        tr_f32 CursorR = 0.9f;
+        tr_f32 CursorG = 0.4f;
+        tr_f32 CursorB = 0.5f;
+        tr_f32 CursorA = 0.9f;
+
+        tr_u32 LowerOffset = TR_MIN(App.Mark, App.Cursor);
+        tr_u32 UpperOffset = TR_MAX(App.Mark, App.Cursor);
+
+        tr_f32 LowerMinX = EditorOffsetX;
+        tr_f32 LowerMinY = EditorOffsetY;
+
+        tr_f32 UpperMinX = EditorOffsetX;
+        tr_f32 UpperMinY = EditorOffsetY;
+
+        if (LowerOffset == App.Mark)
+        {
+            LowerMinX += App.MarkOffsetX;
+            LowerMinY += App.MarkOffsetY;
+
+            UpperMinX += App.CursorOffsetX;
+            UpperMinY += App.CursorOffsetY;
+        }
+        else
+        {
+            UpperMinX += App.MarkOffsetX;
+            UpperMinY += App.MarkOffsetY;
+
+            LowerMinX += App.CursorOffsetX;
+            LowerMinY += App.CursorOffsetY;
+        }
+
+        tr_f32 LowerR = 0.0f;
+        tr_f32 LowerG = 0.0f;
+        tr_f32 LowerB = 0.0f;
+        tr_f32 LowerA = 0.0f;
+
+        tr_f32 UpperR = 0.0f;
+        tr_f32 UpperG = 0.0f;
+        tr_f32 UpperB = 0.0f;
+        tr_f32 UpperA = 0.0f;
+
+        if (LowerOffset == App.Mark)
+        {
+            LowerR = MarkR;
+            LowerG = MarkG;
+            LowerB = MarkB;
+            LowerA = MarkA;
+
+            UpperR = CursorR;
+            UpperG = CursorG;
+            UpperB = CursorB;
+            UpperA = CursorA;
+        }
+        else
+        {
+            UpperR = MarkR;
+            UpperG = MarkG;
+            UpperB = MarkB;
+            UpperA = MarkA;
+
+            LowerR = CursorR;
+            LowerG = CursorG;
+            LowerB = CursorB;
+            LowerA = CursorA;
+        }
+
+        tr_f32 BarSizeX = 6.0f;
+        tr_f32 BarSizeY = 33.0f;
+
+        tr_f32 UnderSizeX = 10.0f;
+        tr_f32 UnderSizeY = 6.0f;
+
+        trRect2D(
+            LowerMinX,
+            LowerMinY,
+            LowerMinX + BarSizeX,
+            LowerMinY + BarSizeY,
+            LowerR, LowerG, LowerB, LowerA
+        );
+
+        trRect2D(
+            LowerMinX + BarSizeX,
+            LowerMinY,
+            LowerMinX + BarSizeX + UnderSizeX,
+            LowerMinY + UnderSizeY,
+            LowerR, LowerG, LowerB, LowerA
+        );
+
+        trRect2D(
+            UpperMinX,
+            UpperMinY,
+            UpperMinX + BarSizeX,
+            UpperMinY + BarSizeY,
+            UpperR, UpperG, UpperB, UpperA
+        );
+
+        trRect2D(
+            UpperMinX,
+            UpperMinY + BarSizeY - UnderSizeY,
+            UpperMinX - UnderSizeX,
+            UpperMinY + BarSizeY,
+            UpperR, UpperG, UpperB, UpperA
+        );
     }
+    else if (App.EditorMode == EDITOR_MODE_INSERT)
+    {
+        tr_f32 CursorSizeX = 5.0f;
+        tr_f32 CursorSizeY = 33.0f;
 
-    tr_f32 CursorMinX = OffsetX + CursorRelativeX;
-    tr_f32 CursorMinY = OffsetY + CursorRelativeY;
-    tr_f32 CursorMaxX = CursorMinX + CursorSizeX;
-    tr_f32 CursorMaxY = CursorMinY + CursorSizeY;
+        tr_f32 CursorR = 0.3f;
+        tr_f32 CursorG = 0.6f;
+        tr_f32 CursorB = 0.9f;
+        tr_f32 CursorA = 0.9f;
 
-    trRect2D(
-        CursorMinX, CursorMinY,
-        CursorMaxX, CursorMaxY,
-        CursorR, CursorG, CursorB, CursorA
-    );
+        tr_f32 CursorMinX = EditorOffsetX + App.CursorOffsetX;
+        tr_f32 CursorMinY = EditorOffsetY + App.CursorOffsetY;
+        tr_f32 CursorMaxX = CursorMinX + CursorSizeX;
+        tr_f32 CursorMaxY = CursorMinY + CursorSizeY;
+
+        trRect2D(
+            CursorMinX, CursorMinY,
+            CursorMaxX, CursorMaxY,
+            CursorR, CursorG, CursorB, CursorA
+        );
+    }
 }
 
 // NOTE(vak): Buffer implementation
@@ -484,6 +654,9 @@ static void InsertCharacterAtCursor(char Character)
 {
     TR_ASSERT(App.Cursor <= App.BufferSize);
 
+    if (App.Mark > App.Cursor)
+        App.Mark++;
+
     InsertCharacterAt(App.Cursor, Character);
     MoveCursorRight();
 }
@@ -491,6 +664,12 @@ static void InsertCharacterAtCursor(char Character)
 static void UpdateCursorPreferredColumn(void)
 {
     App.PreferredColumn = App.Cursor - SeekLineStartAt(App.Cursor);
+}
+
+static void ClampCursorAndMark(void)
+{
+    App.Cursor = TR_MIN(App.Cursor, App.BufferSize);
+    App.Mark = TR_MIN(App.Mark, App.BufferSize);
 }
 
 static tr_b32 IsWhitespace(char Character)
@@ -545,11 +724,37 @@ static void ToggleEditorMode(void)
         App.EditorMode = EDITOR_MODE_NORMAL;
 }
 
+static void ToggleEditorModeAndNewLineAbove(void)
+{
+    ToggleEditorMode();
+    MoveCursorLineStart();
+    StartNewLine();
+    MoveCursorUp();
+}
+
 static void ToggleEditorModeAndNewLineBelow(void)
 {
     ToggleEditorMode();
     MoveCursorLineEnd();
     StartNewLine();
+}
+
+static void AnchorMarkAtCursor(void)
+{
+    App.Mark = App.Cursor;
+}
+
+static void DeleteMarkedRange(void)
+{
+    tr_u32 Lower = TR_MIN(App.Mark, App.Cursor);
+    tr_u32 Upper = TR_MAX(App.Mark, App.Cursor);
+
+    DeleteRangeAt(Lower, Upper - Lower);
+
+    App.Mark = Lower;
+    App.Cursor = Lower;
+
+    UpdateCursorPreferredColumn();
 }
 
 static void MoveCursorLeft(void)
@@ -613,11 +818,15 @@ static void MoveCursorDown(void)
 static void MoveCursorLineStart(void)
 {
     App.Cursor = SeekLineStartAt(App.Cursor);
+
+    UpdateCursorPreferredColumn();
 }
 
 static void MoveCursorLineEnd(void)
 {
     App.Cursor = SeekLineEndAt(App.Cursor);
+
+    UpdateCursorPreferredColumn();
 }
 
 static void MoveCursorPrevParagraph(void)
@@ -804,6 +1013,9 @@ static void DeleteBackward(void)
 {
     if (App.Cursor > 0)
     {
+        if (App.Mark >= App.Cursor)
+            App.Mark--;
+
         MoveCursorLeft();
         DeleteCharacterAt(App.Cursor);
     }
@@ -813,6 +1025,9 @@ static void DeleteForward(void)
 {
     if (App.Cursor < App.BufferSize)
     {
+        if (App.Mark >= App.Cursor)
+            App.Mark--;
+
         DeleteCharacterAt(App.Cursor);
     }
 }
@@ -828,6 +1043,12 @@ static void DeleteCurrentLine(void)
     TR_ASSERT(LineStart <= LineEnd);
 
     DeleteRangeAt(LineStart, LineEnd - LineStart);
+
+    // NOTE(vak): Configure mark position
+    if ((LineStart <= App.Mark) && (App.Mark <= LineEnd))
+        App.Mark = LineStart;
+    else if ((LineEnd < App.Mark))
+        App.Mark -= LineEnd - LineStart;
 
     // NOTE(vak): After deletion, 'LineStart' will be the
     // start of the next line before deletion. We will use
