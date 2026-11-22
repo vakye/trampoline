@@ -549,6 +549,9 @@ tr_func void* trReserveMemory(tr_usize Size);
 tr_func tr_b32 trCommitMemory(void* At, tr_usize Size);
 tr_func void trDecommitMemory(void* At, tr_usize Size);
 
+tr_func void trSetClipboardText(tr_str String);
+tr_func tr_str trGetClipboardText(void);
+
 tr_func void trExit(tr_u8 ExitCode);
 
 /////////////////////////////////////////////////

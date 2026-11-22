@@ -83,6 +83,8 @@ static void ToggleEditorModeAndNewLineBelow(void);
 
 static void AnchorMarkAtCursor(void);
 static void DeleteMarkedRange(void);
+static void CopyMarkedRange(void);
+static void PasteAtCursor(void);
 
 static void MoveCursorLeft(void);
 static void MoveCursorRight(void);
@@ -174,6 +176,8 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
             default: break;
 
             case TR_KEY_D:              DeleteMarkedRange(); break;
+            case TR_KEY_C:              CopyMarkedRange(); break;
+            case TR_KEY_V:              PasteAtCursor(); break;
         }
     }
 }
@@ -529,7 +533,7 @@ void Frame(tr_f32 LastFrameTime)
     }
     else if (App.EditorMode == EDITOR_MODE_INSERT)
     {
-        tr_f32 CursorSizeX = 5.0f;
+        tr_f32 CursorSizeX = 6.0f;
         tr_f32 CursorSizeY = 33.0f;
 
         tr_f32 CursorR = 0.3f;
@@ -566,6 +570,12 @@ static void InsertCharacterAt(tr_u32 Offset, char Character)
     App.Buffer[Offset] = Character;
 
     App.BufferSize++;
+
+    if (App.Mark > Offset)
+        App.Mark++;
+
+    if (App.Cursor > Offset)
+        App.Cursor++;
 }
 
 static void InsertStringAt(tr_u32 Offset, tr_str String)
@@ -586,6 +596,12 @@ static void InsertStringAt(tr_u32 Offset, tr_str String)
     );
 
     App.BufferSize += String.Size;
+
+    if (App.Mark > Offset)
+        App.Mark += String.Size;
+
+    if (App.Cursor > Offset)
+        App.Cursor += String.Size;
 }
 
 static void DeleteCharacterAt(tr_u32 Offset)
@@ -599,6 +615,12 @@ static void DeleteCharacterAt(tr_u32 Offset)
     );
 
     App.BufferSize -= 1;
+
+    if (App.Mark > Offset)
+        App.Mark--;
+
+    if (App.Cursor > Offset)
+        App.Cursor--;
 }
 
 static void DeleteRangeAt(tr_u32 Offset, tr_u32 Size)
@@ -612,6 +634,16 @@ static void DeleteRangeAt(tr_u32 Offset, tr_u32 Size)
     );
 
     App.BufferSize -= Size;
+
+    if ((App.Mark >= Offset) && (App.Mark <= Offset + Size))
+        App.Mark = Offset;
+    if (App.Mark > Offset)
+        App.Mark -= Size;
+
+    if ((App.Cursor >= Offset) && (App.Cursor <= Offset + Size))
+        App.Cursor = Offset;
+    if (App.Cursor > Offset)
+        App.Cursor -= Size;
 }
 
 static tr_u32 SeekLineStartAt(tr_u32 Offset)
@@ -653,9 +685,6 @@ static tr_u32 SeekLineEndAt(tr_u32 Offset)
 static void InsertCharacterAtCursor(char Character)
 {
     TR_ASSERT(App.Cursor <= App.BufferSize);
-
-    if (App.Mark > App.Cursor)
-        App.Mark++;
 
     InsertCharacterAt(App.Cursor, Character);
     MoveCursorRight();
@@ -754,6 +783,26 @@ static void DeleteMarkedRange(void)
     App.Mark = Lower;
     App.Cursor = Lower;
 
+    UpdateCursorPreferredColumn();
+}
+
+static void CopyMarkedRange(void)
+{
+    tr_u32 Lower = TR_MIN(App.Mark, App.Cursor);
+    tr_u32 Upper = TR_MAX(App.Mark, App.Cursor);
+
+    tr_str String = trStrData((char*)App.Buffer + Lower, Upper - Lower);
+
+    trSetClipboardText(String);
+}
+
+static void PasteAtCursor(void)
+{
+    tr_str String = trGetClipboardText();
+
+    InsertStringAt(App.Cursor, String);
+
+    App.Cursor += String.Size;
     UpdateCursorPreferredColumn();
 }
 
@@ -1013,9 +1062,6 @@ static void DeleteBackward(void)
 {
     if (App.Cursor > 0)
     {
-        if (App.Mark >= App.Cursor)
-            App.Mark--;
-
         MoveCursorLeft();
         DeleteCharacterAt(App.Cursor);
     }
@@ -1025,9 +1071,6 @@ static void DeleteForward(void)
 {
     if (App.Cursor < App.BufferSize)
     {
-        if (App.Mark >= App.Cursor)
-            App.Mark--;
-
         DeleteCharacterAt(App.Cursor);
     }
 }
@@ -1043,12 +1086,6 @@ static void DeleteCurrentLine(void)
     TR_ASSERT(LineStart <= LineEnd);
 
     DeleteRangeAt(LineStart, LineEnd - LineStart);
-
-    // NOTE(vak): Configure mark position
-    if ((LineStart <= App.Mark) && (App.Mark <= LineEnd))
-        App.Mark = LineStart;
-    else if ((LineEnd < App.Mark))
-        App.Mark -= LineEnd - LineStart;
 
     // NOTE(vak): After deletion, 'LineStart' will be the
     // start of the next line before deletion. We will use

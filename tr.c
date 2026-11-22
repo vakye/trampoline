@@ -834,6 +834,7 @@ tr_func tr_event* trAddEvent(tr_event_kind Kind)
     #define TR_LINUX_SYSCALL_NR_MMAP            (9)
     #define TR_LINUX_SYSCALL_NR_MPROTECT        (10)
     #define TR_LINUX_SYSCALL_NR_MUNMAP          (11)
+    #define TR_LINUX_SYSCALL_NR_PIPE            (22)
     #define TR_LINUX_SYSCALL_NR_NANOSLEEP       (35)
     #define TR_LINUX_SYSCALL_NR_EXIT            (60)
     #define TR_LINUX_SYSCALL_NR_CLOCK_GETTIME   (228)
@@ -906,6 +907,8 @@ tr_func tr_u32 trLinuxWaylandGetWindowWidth(void);
 tr_func tr_u32 trLinuxWaylandGetWindowHeight(void);
 tr_func tr_f32 trLinuxWaylandGetMouseX(void);
 tr_func tr_f32 trLinuxWaylandGetMouseY(void);
+tr_func void trLinuxWaylandSetClipboardText(tr_str String);
+tr_func tr_str trLinuxWaylandGetClipboardText(void);
 
 tr_func void trVulkanSetup(void);
 tr_func void trVulkanBeginFrame(void);
@@ -1019,6 +1022,16 @@ tr_func tr_f32 trGetMouseY(void)
 {
     tr_f32 Result = trLinuxWaylandGetMouseY();
     return (Result);
+}
+
+tr_func void trSetClipboardText(tr_str String)
+{
+    trLinuxWaylandSetClipboardText(String);
+}
+
+tr_func tr_str trGetClipboardText(void)
+{
+    return trLinuxWaylandGetClipboardText();
 }
 
 typedef struct
@@ -1535,6 +1548,19 @@ typedef struct
     struct xdg_surface* XdgSurface;
     struct xdg_toplevel* XdgTopLevel;
 
+    struct wl_data_device_manager* DataDeviceManager;
+    struct wl_data_device* DataDevice;
+
+    tr_b32 DataOfferIsOkay;
+
+    struct wl_data_source* DataSource;
+
+    void* ClipboardCopyMemory;
+    tr_usize ClipboardCopySize;
+
+    void* ClipboardPasteMemory;
+    tr_usize ClipboardPasteSize;
+
     struct wl_seat* Seat;
     struct wl_pointer* Pointer;
     struct wl_keyboard* Keyboard;
@@ -1544,6 +1570,8 @@ typedef struct
     struct xkb_state* XkbState;
 
     tr_f32 MouseX, MouseY;
+
+    tr_u32 KeyboardEnterSerial;
 
     tr_u32 TopLevelW, TopLevelH;
     tr_u32 WindowW, WindowH;
@@ -1590,7 +1618,8 @@ tr_func void trLinuxWaylandRegistryGlobal(
     }
     else if (trLinuxWaylandMatchString(InterfaceData, wl_seat_interface.name))
     {
-        trWayland.Seat = wl_registry_bind(Registry, Name, &wl_seat_interface, Version);
+        if (!trWayland.Seat)
+            trWayland.Seat = wl_registry_bind(Registry, Name, &wl_seat_interface, Version);
     }
     else if (trLinuxWaylandMatchString(InterfaceData, xdg_wm_base_interface.name))
     {
@@ -1599,6 +1628,10 @@ tr_func void trLinuxWaylandRegistryGlobal(
     else if (trLinuxWaylandMatchString(InterfaceData, wl_output_interface.name))
     {
         trWayland.Output = wl_registry_bind(Registry, Name, &wl_output_interface, Version);
+    }
+    else if (trLinuxWaylandMatchString(InterfaceData, wl_data_device_manager_interface.name))
+    {
+        trWayland.DataDeviceManager = wl_registry_bind(Registry, Name, &wl_data_device_manager_interface, Version);
     }
 }
 
@@ -1875,6 +1908,7 @@ tr_func void trLinuxWaylandKeyboardEnter(
     struct wl_array* Keys
 )
 {
+    trWayland.KeyboardEnterSerial = Serial;
 }
 
 tr_func void trLinuxWaylandKeyboardLeave(
@@ -2198,6 +2232,135 @@ tr_func void trLinuxWaylandSeatName(
 {
 }
 
+tr_func void trLinuxWaylandDataOfferOffer(
+    void* Data,
+    struct wl_data_offer* DataOffer,
+    const char* MIMETypeInit
+)
+{
+    tr_str MIMEType = trCString(MIMETypeInit);
+
+    if (trStringStartsWith(MIMEType, trStr("text/")))
+        trWayland.DataOfferIsOkay = TR_TRUE;
+}
+
+tr_func void trLinuxWaylandDataDeviceDataOffer(
+    void* Data,
+    struct wl_data_device* DataDevice,
+    struct wl_data_offer* DataOffer
+)
+{
+    trWayland.DataOfferIsOkay = TR_FALSE;
+
+    static struct wl_data_offer_listener DataOfferListener =
+    {
+        .offer = trLinuxWaylandDataOfferOffer,
+    };
+
+    wl_data_offer_add_listener(DataOffer, &DataOfferListener, 0);
+}
+
+tr_func void trLinuxWaylandDataDeviceSelection(
+    void* Data,
+    struct wl_data_device* DataDevice,
+    struct wl_data_offer* DataOffer
+)
+{
+    if (trWayland.ClipboardPasteMemory)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MUNMAP,
+            (tr_usize)trWayland.ClipboardPasteMemory,
+            trWayland.ClipboardPasteSize,
+            0, 0, 0, 0
+        );
+
+        trWayland.ClipboardPasteMemory = 0;
+        trWayland.ClipboardPasteSize = 0;
+    }
+
+    if (!trWayland.DataOfferIsOkay)
+        return;
+
+    if (DataOffer == 0)
+        return;
+
+    int FileDescriptors[2];
+
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_PIPE,
+        (tr_usize)FileDescriptors,
+        0, 0, 0, 0, 0
+    );
+
+    wl_data_offer_receive(DataOffer, "text/plain", FileDescriptors[1]);
+
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_CLOSE,
+        FileDescriptors[1],
+        0, 0, 0, 0, 0
+    );
+
+    wl_display_roundtrip(trWayland.Display);
+
+    tr_usize Reserved = 1 * 1024 * 1024 * 1024;
+
+    {
+        tr_ssize Mapping = (tr_ssize)trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MMAP,
+            0,
+            Reserved,
+            0x0,    // NOTE(vak): PROT_NONE
+            0x22,   // NOTE(vak): MAP_PRIVATE | MAP_ANONYMOUS
+            -1,
+            0
+        );
+
+        trWayland.ClipboardPasteMemory = (void*)TR_MAX(0, Mapping);
+
+        if (!trWayland.ClipboardPasteMemory)
+            return;
+    }
+
+    trWayland.ClipboardPasteSize = 0;
+
+    tr_usize ChunkSize = 65536;
+
+    while (trWayland.ClipboardPasteSize + ChunkSize <= Reserved)
+    {
+        tr_u8* ReadInto = (tr_u8*)trWayland.ClipboardPasteMemory + trWayland.ClipboardPasteSize;
+
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MPROTECT,
+            (tr_usize)ReadInto,
+            ChunkSize,
+            0x3, // NOTE(vak): PROT_READ | PROT_WRITE
+            0, 0, 0
+        );
+
+        tr_ssize BytesRead = (tr_ssize)trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_READ,
+            FileDescriptors[0],
+            (tr_usize)ReadInto,
+            ChunkSize,
+            0, 0, 0
+        );
+
+        if (BytesRead <= 0)
+            break;
+
+        trWayland.ClipboardPasteSize += BytesRead;
+    }
+
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_CLOSE,
+        FileDescriptors[0],
+        0, 0, 0, 0, 0
+    );
+
+    wl_data_offer_destroy(DataOffer);
+}
+
 tr_func void trLinuxWaylandSetup(void)
 {
     trWayland.Display = wl_display_connect(0);
@@ -2227,6 +2390,25 @@ tr_func void trLinuxWaylandSetup(void)
         };
 
         wl_seat_add_listener(trWayland.Seat, &SeatListener, 0);
+    }
+
+    if (trWayland.DataDeviceManager && trWayland.Seat)
+    {
+        trWayland.DataDevice = wl_data_device_manager_get_data_device(
+            trWayland.DataDeviceManager,
+            trWayland.Seat
+        );
+    }
+
+    if (trWayland.DataDevice)
+    {
+        static struct wl_data_device_listener DataDeviceListener =
+        {
+            .data_offer = trLinuxWaylandDataDeviceDataOffer,
+            .selection = trLinuxWaylandDataDeviceSelection,
+        };
+
+        wl_data_device_add_listener(trWayland.DataDevice, &DataDeviceListener, 0);
     }
 
     static struct xdg_wm_base_listener XdgWmBaseListener =
@@ -2341,6 +2523,176 @@ tr_func tr_f32 trLinuxWaylandGetMouseX(void)
 tr_func tr_f32 trLinuxWaylandGetMouseY(void)
 {
     tr_f32 Result = trWayland.MouseY;
+    return (Result);
+}
+
+tr_func void trLinuxWaylandDataSourceTarget(
+    void* Data,
+    struct wl_data_source* DataSource,
+    const char* MIMETypeInit
+)
+{
+}
+
+tr_func void trLinuxWaylandDataSourceSend(
+    void* Data,
+    struct wl_data_source* DataSource,
+    const char* MIMETypeInit,
+    int FileDescriptor
+)
+{
+    if (FileDescriptor < 0)
+        return;
+
+    tr_str MIMEType = trCString(MIMETypeInit);
+
+    if (!trStringStartsWith(MIMEType, trStr("text/")))
+        return;
+
+    tr_ssize BytesWritten = (tr_ssize)trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_WRITE,
+        FileDescriptor,
+        (tr_usize)trWayland.ClipboardCopyMemory,
+        trWayland.ClipboardCopySize,
+        0, 0, 0
+    );
+
+    TR_ASSERT((tr_usize)BytesWritten == trWayland.ClipboardCopySize);
+
+    trLinuxSyscall(
+        TR_LINUX_SYSCALL_NR_CLOSE,
+        FileDescriptor,
+        0, 0, 0, 0, 0
+    );
+}
+
+tr_func void trLinuxWaylandDataSourceCancelled(
+    void* Data,
+    struct wl_data_source* DataSource
+)
+{
+    TR_ASSERT(DataSource == trWayland.DataSource);
+
+    if (trWayland.ClipboardCopyMemory)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MUNMAP,
+            (tr_usize)trWayland.ClipboardCopyMemory,
+            trWayland.ClipboardCopySize,
+            0, 0, 0, 0
+        );
+
+        trWayland.ClipboardCopyMemory = 0;
+        trWayland.ClipboardCopySize = 0;
+    }
+
+    wl_data_source_destroy(trWayland.DataSource);
+    trWayland.DataSource = 0;
+}
+
+tr_func void trLinuxWaylandSetClipboardText(tr_str String)
+{
+    if (trWayland.ClipboardCopyMemory)
+    {
+        trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MUNMAP,
+            (tr_usize)trWayland.ClipboardCopyMemory,
+            trWayland.ClipboardCopySize,
+            0, 0, 0, 0
+        );
+
+        trWayland.ClipboardCopyMemory = 0;
+        trWayland.ClipboardCopySize = 0;
+    }
+
+    if (trWayland.DataSource)
+    {
+        wl_data_source_destroy(trWayland.DataSource);
+        trWayland.DataSource = 0;
+    }
+
+    if (trIsNilString(String))
+    {
+        wl_data_device_set_selection(
+            trWayland.DataDevice,
+            0,
+            trWayland.KeyboardEnterSerial
+        );
+
+        return;
+    }
+
+    trWayland.ClipboardCopySize = String.Size;
+
+    {
+        tr_ssize Mapping = (tr_ssize)trLinuxSyscall(
+            TR_LINUX_SYSCALL_NR_MMAP,
+            0,
+            String.Size,
+            0x3,    // NOTE(vak): PROT_READ | PROT_WRITE
+            0x22,   // NOTE(vak): MAP_PRIVATE | MAP_ANONYMOUS
+            -1,
+            0
+        );
+
+        trWayland.ClipboardCopyMemory = (void*)TR_MAX(0, Mapping);
+    }
+
+    if (!trWayland.ClipboardCopyMemory)
+        return;
+
+    trCopyMemory(
+        trWayland.ClipboardCopyMemory,
+        String.Data,
+        String.Size
+    );
+
+    if (!trWayland.DataDeviceManager)
+        return;
+
+    if (!trWayland.DataDevice)
+        return;
+
+    trWayland.DataSource = wl_data_device_manager_create_data_source(trWayland.DataDeviceManager);
+
+    if (!trWayland.DataSource)
+        return;
+
+    static struct wl_data_source_listener DataSourceListener =
+    {
+        .target = trLinuxWaylandDataSourceTarget,
+        .send = trLinuxWaylandDataSourceSend,
+        .cancelled = trLinuxWaylandDataSourceCancelled,
+    };
+
+    wl_data_source_add_listener(trWayland.DataSource, &DataSourceListener, 0);
+
+    wl_data_source_offer(trWayland.DataSource, "UTF8_STRING");
+    wl_data_source_offer(trWayland.DataSource, "COMPOUND_TEXT");
+    wl_data_source_offer(trWayland.DataSource, "TEXT");
+    wl_data_source_offer(trWayland.DataSource, "STRING");
+    wl_data_source_offer(trWayland.DataSource, "text/plain;charset=utf-8");
+    wl_data_source_offer(trWayland.DataSource, "text/plain");
+
+    wl_data_device_set_selection(
+        trWayland.DataDevice,
+        trWayland.DataSource,
+        trWayland.KeyboardEnterSerial
+    );
+}
+
+tr_func tr_str trLinuxWaylandGetClipboardText(void)
+{
+    tr_str Result = trStr("");
+
+    if (trWayland.ClipboardPasteSize > 0)
+    {
+        Result = trStrData(
+            trWayland.ClipboardPasteMemory,
+            trWayland.ClipboardPasteSize
+        );
+    }
+
     return (Result);
 }
 
