@@ -84,6 +84,7 @@ static void ToggleEditorModeAndNewLineBelow(void);
 static void AnchorMarkAtCursor(void);
 static void DeleteMarkedRange(void);
 static void CopyMarkedRange(void);
+static void CutMarkedRange(void);
 static void PasteAtCursor(void);
 
 static void MoveCursorLeft(void);
@@ -100,6 +101,9 @@ static void MoveCursorNextParagraph(void);
 static void MoveCursorPrevWord(void);
 static void MoveCursorNextWord(void);
 
+static void MoveCursorStartOfBuffer(void);
+static void MoveCursorEndOfBuffer(void);
+
 static void DeleteBackward(void);
 static void DeleteForward(void);
 static void DeleteCurrentLine(void);
@@ -111,6 +115,7 @@ static application App = {0};
 
 void Setup(void)
 {
+    trToggleFullscreen();
     trSetTargetFPS(120.0f);
 
     tr_loaded_file LoadedFile = {0};
@@ -136,10 +141,12 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
         {
             default: break;
 
-            case TR_KEY_O:              MoveCursorUp(); break;
-            case TR_KEY_K:              MoveCursorLeft(); break;
-            case TR_KEY_L:              MoveCursorDown(); break;
-            case TR_KEY_SEMICOLON:      MoveCursorRight(); break;
+            case TR_KEY_F11:            trToggleFullscreen(); break;
+
+            case TR_KEY_P:              MoveCursorUp(); break;
+            case TR_KEY_L:              MoveCursorLeft(); break;
+            case TR_KEY_SEMICOLON:      MoveCursorDown(); break;
+            case TR_KEY_APOSTROPHE:     MoveCursorRight(); break;
 
             case TR_KEY_1:              MoveCursorLineStart(); break;
             case TR_KEY_2:              MoveCursorLineEnd(); break;
@@ -153,10 +160,10 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
         {
             default: break;
 
-            case TR_KEY_O:              MoveCursorPrevParagraph(); break;
-            case TR_KEY_L:              MoveCursorNextParagraph(); break;
-            case TR_KEY_K:              MoveCursorPrevWord(); break;
-            case TR_KEY_SEMICOLON:      MoveCursorNextWord(); break;
+            case TR_KEY_P:              MoveCursorPrevParagraph(); break;
+            case TR_KEY_SEMICOLON:      MoveCursorNextParagraph(); break;
+            case TR_KEY_L:              MoveCursorPrevWord(); break;
+            case TR_KEY_APOSTROPHE:     MoveCursorNextWord(); break;
 
             case TR_KEY_Q:              ToggleEditorMode(); break;
             case TR_KEY_W:              ToggleEditorModeAndNewLineBelow(); break;
@@ -176,10 +183,24 @@ static void EditorNormalModeOnKeyDown(tr_key Key)
             default: break;
 
             case TR_KEY_D:              DeleteMarkedRange(); break;
+            case TR_KEY_X:              CutMarkedRange(); break;
             case TR_KEY_C:              CopyMarkedRange(); break;
             case TR_KEY_V:              PasteAtCursor(); break;
         }
     }
+    else if (App.ModifierFlags == (MODIFIER_FLAG_CTRL|MODIFIER_FLAG_SHIFT))
+    {
+        // NOTE(vak): *Only* ctrl and shift down
+
+        switch (Key)
+        {
+            default: break;
+
+            case TR_KEY_P:              MoveCursorStartOfBuffer(); break;
+            case TR_KEY_SEMICOLON:      MoveCursorEndOfBuffer(); break;
+        }
+    }
+
 }
 
 static void EditorInsertModeOnKeyDown(tr_key Key)
@@ -191,6 +212,8 @@ static void EditorInsertModeOnKeyDown(tr_key Key)
         switch (Key)
         {
             default: break;
+
+            case TR_KEY_F11:            trToggleFullscreen(); break;
 
             case TR_KEY_ENTER:          StartNewLine(); break;
             case TR_KEY_TAB:            InsertTabulation(); break;
@@ -295,7 +318,7 @@ void Frame(tr_f32 LastFrameTime)
                     App.ModifierFlags |= IsDown * Modifier;
                 }
 
-                // NOTE(vak): Perform actions corresponding to key bindings.
+                // NOTE(vak): Perform actions corresponding to key bindings
                 // and editor mode
 
                 if (IsDown)
@@ -559,7 +582,7 @@ void Frame(tr_f32 LastFrameTime)
 static void InsertCharacterAt(tr_u32 Offset, char Character)
 {
     TR_ASSERT(App.BufferSize < TR_ARRAY_COUNT(App.Buffer));
-    TR_ASSERT(Offset <= App.BufferSize);
+    TR_ASSERT(Offset < App.BufferSize);
 
     trMoveMemory(
         App.Buffer + Offset + 1,
@@ -581,7 +604,7 @@ static void InsertCharacterAt(tr_u32 Offset, char Character)
 static void InsertStringAt(tr_u32 Offset, tr_str String)
 {
     TR_ASSERT(App.BufferSize + String.Size <= TR_ARRAY_COUNT(App.Buffer));
-    TR_ASSERT(Offset <= App.BufferSize);
+    TR_ASSERT(Offset < App.BufferSize);
 
     trMoveMemory(
         App.Buffer + Offset + String.Size,
@@ -684,7 +707,7 @@ static tr_u32 SeekLineEndAt(tr_u32 Offset)
 
 static void InsertCharacterAtCursor(char Character)
 {
-    TR_ASSERT(App.Cursor <= App.BufferSize);
+    TR_ASSERT(App.Cursor < App.BufferSize);
 
     InsertCharacterAt(App.Cursor, Character);
     MoveCursorRight();
@@ -697,8 +720,16 @@ static void UpdateCursorPreferredColumn(void)
 
 static void ClampCursorAndMark(void)
 {
-    App.Cursor = TR_MIN(App.Cursor, App.BufferSize);
-    App.Mark = TR_MIN(App.Mark, App.BufferSize);
+    if (App.BufferSize > 0)
+    {
+        App.Cursor = TR_MIN(App.Cursor, App.BufferSize - 1);
+        App.Mark = TR_MIN(App.Mark, App.BufferSize - 1);
+    }
+    else
+    {
+        App.Cursor = 0;
+        App.Mark = 0;
+    }
 }
 
 static tr_b32 IsWhitespace(char Character)
@@ -794,6 +825,12 @@ static void CopyMarkedRange(void)
     tr_str String = trStrData((char*)App.Buffer + Lower, Upper - Lower);
 
     trSetClipboardText(String);
+}
+
+static void CutMarkedRange(void)
+{
+    CopyMarkedRange();
+    DeleteMarkedRange();
 }
 
 static void PasteAtCursor(void)
@@ -1054,6 +1091,22 @@ static void MoveCursorNextWord(void)
             App.Cursor++;
         }
 
+        UpdateCursorPreferredColumn();
+    }
+}
+
+static void MoveCursorStartOfBuffer(void)
+{
+    App.Cursor = 0;
+
+    UpdateCursorPreferredColumn();
+}
+
+static void MoveCursorEndOfBuffer(void)
+{
+    if (App.BufferSize > 0)
+    {
+        App.Cursor = App.BufferSize - 1;
         UpdateCursorPreferredColumn();
     }
 }

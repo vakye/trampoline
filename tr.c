@@ -2111,8 +2111,6 @@ tr_func void trLinuxWaylandKeyboardKey(
     }
     else
     {
-        TR_ASSERT(trWayland.DownKeyCount > 0);
-
         tr_u32 IndexForScancode = ~0u;
 
         for (tr_u32 Index = 0; Index < trWayland.DownKeyCount; Index++)
@@ -2124,16 +2122,19 @@ tr_func void trLinuxWaylandKeyboardKey(
             }
         }
 
-        TR_ASSERT(IndexForScancode != ~0u);
+        if (IndexForScancode != ~0u)
+        {
+            tr_u32 Old = IndexForScancode;
+            tr_u32 New = trWayland.DownKeyCount - 1;
 
-        tr_u32 Old = IndexForScancode;
-        tr_u32 New = trWayland.DownKeyCount - 1;
+            trWayland.DownKeyXkbScancodes[Old] = trWayland.DownKeyXkbScancodes[New];
+            trWayland.TimeUntilKeyRepeat[Old] = trWayland.TimeUntilKeyRepeat[New];
+            trWayland.LastKeyEventTime[Old] = trWayland.LastKeyEventTime[New];
 
-        trWayland.DownKeyXkbScancodes[Old] = trWayland.DownKeyXkbScancodes[New];
-        trWayland.TimeUntilKeyRepeat[Old] = trWayland.TimeUntilKeyRepeat[New];
-        trWayland.LastKeyEventTime[Old] = trWayland.LastKeyEventTime[New];
+            TR_ASSERT(trWayland.DownKeyCount > 0);
 
-        trWayland.DownKeyCount--;
+            trWayland.DownKeyCount--;
+        }
     }
 
     trLinuxWaylandSendKeyEvent(XkbScancode, IsDown);
