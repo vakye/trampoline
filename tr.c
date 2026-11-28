@@ -4724,9 +4724,9 @@ tr_func void trRectOutline2D(
 
     trRect2D(
         MinX - HalfThickness,
-        MinY - HalfThickness,
+        MinY + HalfThickness,
         MinX + HalfThickness,
-        MaxY + HalfThickness,
+        MaxY - HalfThickness,
         R, G, B, A
     );
 
@@ -4734,9 +4734,9 @@ tr_func void trRectOutline2D(
 
     trRect2D(
         MaxX - HalfThickness,
-        MinY - HalfThickness,
+        MinY + HalfThickness,
         MaxX + HalfThickness,
-        MaxY + HalfThickness,
+        MaxY - HalfThickness,
         R, G, B, A
     );
 
